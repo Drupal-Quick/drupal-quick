@@ -1,0 +1,9 @@
+{
+    "blog": {
+        "label": "Blog — Keywords taxonomy + entity reference field on Article",
+        "package": "your-namespace/drupalquick-recipe-blog",
+        "url": "https://github.com/your-namespace/drupalquick-recipe-blog",
+        "path": "vendor/your-namespace/drupalquick-recipe-blog",
+        "theme_assets": true
+    }
+}

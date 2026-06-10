@@ -1,0 +1,27 @@
+{
+    "name": "your-namespace/drupalquick",
+    "description": "Unified site scaffolding via Starterkits and Recipes with Tailwind/Vite skinning compilation pipeline.",
+    "type": "drupal-drush",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.1",
+        "symfony/yaml": "^6.0 || ^7.0",
+        "drupal/core-recipe-unpack": "^1.0" 
+    },
+    "bin": [
+        "bin/dq-init",
+        "bin/dq-install"
+    ],
+    "autoload": {
+        "psr-4": {
+            "DrupalQuick\\": "src/"
+        }
+    },
+    "extra": {
+        "drush": {
+            "services": {
+                "drush.services.yml": "^11 || ^12 || ^13"
+            }
+        }
+    }
+}

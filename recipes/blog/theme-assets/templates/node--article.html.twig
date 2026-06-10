@@ -1,0 +1,51 @@
+{#
+/**
+ * @file
+ * Blog recipe — Article node template.
+ *
+ * Injected into the custom theme by dq:scaffold when the blog recipe is
+ * applied. Expects the `keywords` variable populated by blog.theme.inc.
+ *
+ * @see blog.theme.inc
+ * @ingroup themeable
+ */
+#}
+<article{{ attributes }}>
+
+  {{ title_prefix }}
+  {% if not page %}
+    <h2{{ title_attributes }}>
+      <a href="{{ url }}" rel="bookmark">{{ label }}</a>
+    </h2>
+  {% endif %}
+  {{ title_suffix }}
+
+  {% if display_submitted %}
+    <footer>
+      {{ author_picture }}
+      <address>
+        {% trans %}
+          By <a rel="author" href="{{ author_url }}">{{ author_name }}</a>
+        {% endtrans %}
+      </address>
+      <time datetime="{{ date.attributes.datetime }}">{{ date }}</time>
+    </footer>
+  {% endif %}
+
+  <div{{ content_attributes }}>
+    {{ content|without('field_tags', 'field_keywords') }}
+  </div>
+
+  {% if keywords %}
+    <footer>
+      <nav aria-label="{{ 'Keywords'|t }}">
+        <ul>
+          {% for keyword in keywords %}
+            <li>{{ keyword }}</li>
+          {% endfor %}
+        </ul>
+      </nav>
+    </footer>
+  {% endif %}
+
+</article>

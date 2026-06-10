@@ -1,0 +1,37 @@
+site:
+  name: "My Tailored Drupal Site"
+  admin_user: "admin"
+  admin_pass: "admin_secret_pass"
+
+theme:
+  machine_name: "my_custom_theme"
+  title: "My Custom Theme"
+  # Matches a filename in starterkits/skins/ (without .css).
+  # Available out of the box: minimal, corporate
+  style: "minimal"
+  # Set to false to skip `npm install && npm run build` after theme generation.
+  # Useful when deferring the build to a CI step or building manually later.
+  build: true
+
+# Core and contrib recipes use their normal paths.
+# drupalquick-managed recipes use short keys from the registry
+# (templates/recipe-registry.json). Run `composer exec dq-install`
+# after editing this file — it will fetch any registry-managed recipes
+# before you run `drush dq:scaffold`.
+recipes:
+  - "core/recipes/standard"
+  - "blog"
+
+parameters:
+  # Written into the generated theme as CSS custom properties (:root vars).
+  # Reference in templates as var(--dq-primary-color), etc.
+  theme_design:
+    primary_color: "#10b981"
+    secondary_color: "#1e3a8a"
+    font_family: "'Inter', sans-serif"
+
+  # drush config:set calls applied after recipes finish.
+  # Format: config-object-name → key (dot notation) → value
+  recipe_config:
+    "system.site":
+      slogan: "Scaffolded quickly, maintained sustainably."

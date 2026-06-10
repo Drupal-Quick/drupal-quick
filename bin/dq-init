@@ -1,0 +1,208 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * dq-init: Delivers config.dq.yml to the project root.
+ *
+ * Without flags — copies the template and exits. The user edits the file
+ * then runs `composer exec dq-install`.
+ *
+ * With --interactive — walks the user through site, theme, and recipe
+ * choices via CLI prompts and writes a pre-filled config.dq.yml.
+ *
+ * With --ddev — copies the drupalquick DDEV local config template into the
+ * project's .ddev/ directory if one exists. Can be combined with either of
+ * the above modes.
+ */
+
+$packageRoot = dirname(__DIR__);
+$projectRoot = getcwd();
+$destination = $projectRoot . '/config.dq.yml';
+$interactive = in_array('--interactive', $argv, true);
+$ddev        = in_array('--ddev', $argv, true);
+
+// ------------------------------------------------------------------ Helpers
+
+function ask(string $question, string $default = ''): string {
+    $hint = $default !== '' ? " [{$default}]" : '';
+    echo "{$question}{$hint}: ";
+    $answer = trim(fgets(STDIN));
+    return $answer !== '' ? $answer : $default;
+}
+
+function choose(string $question, array $options, string $default = ''): string {
+    echo "\n{$question}\n";
+    foreach ($options as $i => $label) {
+        $marker = $label === $default ? ' (default)' : '';
+        echo '  ' . ($i + 1) . ". {$label}{$marker}\n";
+    }
+    $defaultPos = array_search($default, $options, true);
+    $defaultNum = $defaultPos !== false ? $defaultPos + 1 : 1;
+    echo "Choice [{$defaultNum}]: ";
+    $input = trim(fgets(STDIN));
+    $idx   = $input !== '' ? (int)$input - 1 : ($defaultPos !== false ? $defaultPos : 0);
+    return $options[$idx] ?? $options[0];
+}
+
+function chooseMany(string $question, array $options): array {
+    echo "\n{$question}\n";
+    echo "(Enter comma-separated numbers, e.g. 1,3 — or press Enter to skip)\n";
+    foreach ($options as $i => $info) {
+        echo '  ' . ($i + 1) . ". {$info['label']}\n";
+    }
+    echo 'Choice: ';
+    $input = trim(fgets(STDIN));
+    if ($input === '') {
+        return [];
+    }
+    $chosen = [];
+    foreach (explode(',', $input) as $num) {
+        $idx = (int)trim($num) - 1;
+        if (isset($options[$idx])) {
+            $chosen[] = $options[$idx]['key'];
+        }
+    }
+    return $chosen;
+}
+
+// ------------------------------------------------------------------ Non-interactive
+
+if (!$interactive) {
+    if (file_exists($destination)) {
+        echo "ℹ️  config.dq.yml already exists. Edit it, then run:\n";
+        echo "   composer exec dq-install\n";
+    } else {
+        $source = $packageRoot . '/templates/config.dq.yml';
+        if (!copy($source, $destination)) {
+            echo "❌ Failed to write config.dq.yml to project root.\n";
+            exit(1);
+        }
+        echo "✅ config.dq.yml created in project root.\n";
+        echo "   Edit it to configure your site, then run:\n";
+        echo "   composer exec dq-install\n";
+    }
+
+    // Handle --ddev regardless of whether config already existed.
+    if ($ddev) {
+        ddev_copy($packageRoot, $projectRoot);
+    }
+
+    exit(0);
+}
+
+// ------------------------------------------------------------------ Interactive
+
+echo "\n drupalquick — interactive setup\n";
+echo str_repeat('─', 40) . "\n\n";
+
+// Site
+echo "--- Site ---\n";
+$siteName  = ask('Site name', 'My Drupal Site');
+$adminUser = ask('Admin username', 'admin');
+$adminPass = ask('Admin password', 'admin');
+
+// Theme
+echo "\n--- Theme ---\n";
+$themeMachine = ask('Theme machine name (lowercase, underscores)', 'my_theme');
+$themeTitle   = ask('Theme display name', 'My Theme');
+
+$skinsDir = $packageRoot . '/starterkits/skins';
+$skins    = ['minimal', 'corporate'];
+if (is_dir($skinsDir)) {
+    $found = [];
+    foreach (scandir($skinsDir) as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
+            $found[] = pathinfo($file, PATHINFO_FILENAME);
+        }
+    }
+    if (!empty($found)) {
+        $skins = $found;
+    }
+}
+$themeSkin = choose('Design skin', $skins, 'minimal');
+
+// Recipes
+$registryFile = $packageRoot . '/templates/recipe-registry.json';
+$registry     = file_exists($registryFile)
+    ? json_decode(file_get_contents($registryFile), true)
+    : [];
+
+$recipeLines = ['  - "core/recipes/standard"'];
+
+if (!empty($registry)) {
+    $options = [];
+    foreach ($registry as $key => $info) {
+        $options[] = ['key' => $key, 'label' => $info['label'] ?? $key];
+    }
+    $chosen = chooseMany('Which drupalquick recipes would you like to include?', $options);
+    foreach ($chosen as $key) {
+        $recipeLines[] = "  - \"{$key}\"";
+    }
+}
+
+$recipesBlock = implode("\n", $recipeLines);
+
+// Write config
+$yaml = <<<YAML
+site:
+  name: "{$siteName}"
+  admin_user: "{$adminUser}"
+  admin_pass: "{$adminPass}"
+
+theme:
+  machine_name: "{$themeMachine}"
+  title: "{$themeTitle}"
+  style: "{$themeSkin}"
+
+recipes:
+{$recipesBlock}
+
+parameters:
+  theme_design:
+    primary_color: "#10b981"
+    secondary_color: "#1e3a8a"
+    font_family: "'Inter', sans-serif"
+  recipe_config:
+    "system.site":
+      slogan: "Scaffolded quickly, maintained sustainably."
+YAML;
+
+if (file_put_contents($destination, $yaml) === false) {
+    echo "❌ Failed to write config.dq.yml.\n";
+    exit(1);
+}
+
+echo "\n✅ config.dq.yml created.\n";
+echo "   Review it, make any edits, then run:\n";
+echo "   composer exec dq-install\n";
+
+if ($ddev) {
+    ddev_copy($packageRoot, $projectRoot);
+}
+
+echo "\n";
+exit(0);
+
+// ------------------------------------------------------------------ DDEV helper
+
+function ddev_copy(string $packageRoot, string $projectRoot): void {
+    $ddevDir = $projectRoot . '/.ddev';
+    $src     = $packageRoot . '/templates/ddev/config.local.yaml';
+
+    if (!is_dir($ddevDir)) {
+        echo "ℹ️  --ddev passed but no .ddev directory found in project root. Skipping.\n";
+        return;
+    }
+
+    if (!file_exists($src)) {
+        echo "❌ DDEV template missing from package at templates/ddev/config.local.yaml.\n";
+        return;
+    }
+
+    $dest = $ddevDir . '/config.local.yaml';
+    if (copy($src, $dest)) {
+        echo "✅ DDEV local config copied to .ddev/config.local.yaml\n";
+    } else {
+        echo "❌ Failed to copy DDEV config to {$dest}\n";
+    }
+}

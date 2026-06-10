@@ -1,0 +1,101 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Registration helper — must be defined before the glob loads includes.
+ *
+ * Recipe-injected .theme.inc files call STARTERKIT_add_preprocessor() to
+ * register closures for specific template hooks. When drush theme:starterkit
+ * generates the custom theme, STARTERKIT is replaced with the real machine
+ * name throughout, so the helper and its callers always share the same name.
+ *
+ * This pattern is aligned with Drupal core's own direction: issue #3266641
+ * on drupal.org opened the theme system to PHP callables as preprocess
+ * callbacks, and Drupal 11.3+ deprecates magic function-name discovery in
+ * favour of explicit callback registration via hook_theme_registry_alter().
+ */
+function STARTERKIT_add_preprocessor(string $hook, callable $fn): void {
+  $GLOBALS['_preprocessors'][STARTERKIT][$hook][] = $fn;
+}
+
+/**
+ * Auto-discover and load recipe-injected theme includes.
+ *
+ * Only files present here are loaded — nothing lands in includes/ unless
+ * the matching recipe was applied during dq:scaffold, so there are no
+ * irrelevant functions from recipes that were not chosen.
+ */
+foreach (glob(__DIR__ . '/includes/*.theme.inc') as $_include) {
+  require_once $_include;
+}
+
+/**
+ * Implements hook_preprocess().
+ *
+ * A single Drupal hook covers every template, delegating to all callbacks
+ * registered for that hook. Two recipe includes can both register for the
+ * same hook (e.g. 'page') without any conflict — they are sequential
+ * entries in the same array, called in the order recipes were applied.
+ */
+function STARTERKIT_preprocess(array &$variables, string $hook): void {
+  foreach ($GLOBALS['_preprocessors'][STARTERKIT][$hook] ?? [] as $fn) {
+    $fn($variables, $hook);
+  }
+}
+
+/**
+ * Implements hook_page_attachments_alter().
+ *
+ * When the Vite dev server is running, swap production dist/ assets for live
+ * HMR assets served from localhost:5173. The vite.config.js writes a
+ * .vite-dev marker file on server start and removes it on close/build.
+ */
+function STARTERKIT_page_attachments_alter(array &$attachments): void {
+  $theme  = \Drupal::theme()->getActiveTheme();
+  $marker = DRUPAL_ROOT . '/' . $theme->getPath() . '/.vite-dev';
+
+  if (!file_exists($marker)) {
+    return;
+  }
+
+  $port   = trim(file_get_contents($marker)) ?: '5173';
+  $origin = "http://localhost:{$port}";
+
+  $attachments['#attached']['library'] = array_filter(
+    $attachments['#attached']['library'] ?? [],
+    static fn($lib) => $lib !== $theme->getName() . '/global'
+  );
+
+  $attachments['#attached']['html_head'][] = [
+    [
+      '#type'       => 'html_tag',
+      '#tag'        => 'script',
+      '#attributes' => ['type' => 'module', 'src' => "{$origin}/@vite/client"],
+    ],
+    'vite_client',
+  ];
+
+  $attachments['#attached']['html_head'][] = [
+    [
+      '#type'       => 'html_tag',
+      '#tag'        => 'script',
+      '#attributes' => ['type' => 'module', 'src' => "{$origin}/src/main.js"],
+    ],
+    'vite_main',
+  ];
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for html templates.
+ */
+function STARTERKIT_preprocess_html(array &$variables): void {
+  $variables['attributes']['class'][] = 'antialiased';
+}
+
+/**
+ * Implements hook_preprocess_HOOK() for page templates.
+ */
+function STARTERKIT_preprocess_page(array &$variables): void {
+  $variables['has_sidebar'] = !empty($variables['page']['sidebar']);
+}

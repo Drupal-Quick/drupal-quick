@@ -1,0 +1,10 @@
+/* Entry stylesheet — Tailwind v4 CSS-first import */
+@import "tailwindcss";
+
+/*
+ * Skin tokens injected by drupalquick post-processing.
+ * This file is created/replaced during `drush dq:scaffold` from the chosen
+ * skin file in starterkits/skins/. It is intentionally left empty here so
+ * the theme compiles without a skin selection.
+ */
+@import "./theme-skin.css";

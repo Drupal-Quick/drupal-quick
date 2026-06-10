@@ -1,0 +1,12 @@
+# drupalquick/templates/config.local.yaml
+# DDEV local configuration overrides for this project.
+# This file is automatically ignored by DDEV's main config but read at runtime.
+
+php_version: "8.3"
+database:
+  type: mariadb
+  version: "10.11"
+
+# Add any custom environment variables or hooks required by your starterkit/recipes
+web_environment:
+  - DRUPALQUICK_SCAFFOLDED=true

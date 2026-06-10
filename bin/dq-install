@@ -1,0 +1,130 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * dq-install: Resolves and installs recipe Composer packages declared in
+ * config.dq.yml.
+ *
+ * For each recipe key that matches a drupalquick-managed recipe in the
+ * registry, this script:
+ *   1. Adds the recipe's VCS repository to the project composer.json.
+ *   2. Runs `composer require` to download the package and its dependencies.
+ *
+ * Core and contrib recipe paths are passed through untouched — they are
+ * already resolvable by Composer without any extra repository entries.
+ *
+ * Run this after editing config.dq.yml and before `drush dq:scaffold`.
+ */
+
+$packageRoot = dirname(__DIR__);
+$projectRoot = getcwd();
+
+// Load the project autoloader so Symfony YAML is available.
+$autoload = $projectRoot . '/vendor/autoload.php';
+if (!file_exists($autoload)) {
+    die("❌ vendor/autoload.php not found. Run `composer install` first.\n");
+}
+require_once $autoload;
+
+use Symfony\Component\Yaml\Yaml;
+use Symfony\Component\Yaml\Exception\ParseException;
+
+// ------------------------------------------------------------------ Config
+
+$configFile = $projectRoot . '/config.dq.yml';
+if (!file_exists($configFile)) {
+    die("❌ config.dq.yml not found. Run `composer exec dq-init` first.\n");
+}
+
+try {
+    $config = Yaml::parseFile($configFile);
+} catch (ParseException $e) {
+    die("❌ Could not parse config.dq.yml: {$e->getMessage()}\n");
+}
+
+$recipes = $config['recipes'] ?? [];
+if (empty($recipes)) {
+    echo "ℹ️  No recipes listed in config.dq.yml. Nothing to install.\n";
+    echo "   Run `drush dq:scaffold` when ready.\n";
+    exit(0);
+}
+
+// ------------------------------------------------------------------ Registry
+
+$registryFile = $packageRoot . '/templates/recipe-registry.json';
+if (!file_exists($registryFile)) {
+    die("❌ recipe-registry.json missing from drupalquick package.\n");
+}
+$registry = json_decode(file_get_contents($registryFile), true);
+
+// ------------------------------------------------------------------ Project composer.json
+
+$composerFile = $projectRoot . '/composer.json';
+if (!file_exists($composerFile)) {
+    die("❌ composer.json not found in project root.\n");
+}
+$composer = json_decode(file_get_contents($composerFile), true);
+
+// ------------------------------------------------------------------ Resolve
+
+$toRequire = [];
+
+foreach ($recipes as $recipe) {
+    if (!isset($registry[$recipe])) {
+        // Not a drupalquick-managed recipe — no action needed here.
+        continue;
+    }
+
+    $info    = $registry[$recipe];
+    $package = $info['package'];
+    $url     = $info['url'];
+
+    // Add VCS repository entry if it is not already present.
+    $repos   = $composer['repositories'] ?? [];
+    $exists  = false;
+    foreach ($repos as $repo) {
+        if (($repo['url'] ?? '') === $url) {
+            $exists = true;
+            break;
+        }
+    }
+
+    if (!$exists) {
+        $composer['repositories'][] = ['type' => 'vcs', 'url' => $url];
+        echo "📎 Registered VCS repository for {$package}\n";
+    } else {
+        echo "ℹ️  Repository for {$package} already registered.\n";
+    }
+
+    $toRequire[] = $package;
+}
+
+// Write back the updated composer.json before running require so Composer
+// can find the newly added VCS repositories.
+if (!empty($toRequire)) {
+    file_put_contents(
+        $composerFile,
+        json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
+    );
+}
+
+// ------------------------------------------------------------------ Require
+
+if (empty($toRequire)) {
+    echo "ℹ️  No drupalquick-managed recipes to install (core/contrib recipes\n";
+    echo "   are already available on disk).\n";
+    echo "   Run `drush dq:scaffold` when ready.\n";
+    exit(0);
+}
+
+foreach ($toRequire as $package) {
+    echo "\n📦 Installing {$package}...\n";
+    passthru("composer require {$package}", $exitCode);
+    if ($exitCode !== 0) {
+        echo "❌ `composer require {$package}` failed.\n";
+        exit($exitCode);
+    }
+}
+
+echo "\n✅ Recipe packages installed.\n";
+echo "   Run `drush dq:scaffold` to build your site.\n";

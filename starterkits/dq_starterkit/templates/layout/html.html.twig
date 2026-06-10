@@ -1,0 +1,37 @@
+{#
+/**
+ * @file
+ * Default theme implementation for the basic HTML document structure.
+ *
+ * Variables:
+ * - logged_in: A flag indicating if user is logged in.
+ * - root_path: The root path of the current page (e.g., node, user, taxonomy).
+ * - node_type: The content type for node pages; otherwise FALSE.
+ * - head_title: Array of parts of the <title> tag.
+ * - page_top: Initial rendered markup.
+ * - page: The rendered page markup.
+ * - page_bottom: Closing rendered markup.
+ * - html_attributes: HTML element attributes.
+ *
+ * @see template_preprocess_html()
+ * @ingroup themeable
+ */
+#}
+<!DOCTYPE html>
+<html{{ html_attributes }}>
+  <head>
+    <head-placeholder token="{{ placeholder_token }}">
+    <title>{{ head_title|safe_join(' | ') }}</title>
+    <css-placeholder token="{{ placeholder_token }}">
+    <js-placeholder token="{{ placeholder_token }}">
+  </head>
+  <body{{ attributes }}>
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-4">
+      {{- 'Skip to main content'|t -}}
+    </a>
+    {{ page_top }}
+    {{ page }}
+    {{ page_bottom }}
+    <js-bottom-placeholder token="{{ placeholder_token }}">
+  </body>
+</html>

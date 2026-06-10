@@ -1,0 +1,19 @@
+name: STARTERKIT
+type: theme
+base theme: false
+description: 'A custom Drupal theme built with Tailwind CSS v4 and Vite.'
+core_version_requirement: ^10.3 || ^11
+starterkit: true
+
+libraries:
+  - STARTERKIT/global
+
+regions:
+  header: Header
+  primary_menu: 'Primary Menu'
+  breadcrumb: Breadcrumb
+  highlighted: Highlighted
+  help: Help
+  content: Content
+  sidebar: Sidebar
+  footer: Footer
