@@ -2,7 +2,19 @@
 <?php
 
 /**
- * dq-init: Delivers config.dq.yml to the project root.
+ * dq-init: Step 1 of the drupalquick workflow.
+ *
+ * Full workflow:
+ *   1. composer exec dq-init [--interactive] [--ddev]  ← this script
+ *      Delivers config.dq.yml to the project root.
+ *   2. composer exec dq-install
+ *      Installs any drupalquick-managed recipe packages via Composer.
+ *   3. drush dq:scaffold
+ *      Installs Drupal, generates the theme, applies recipes, builds assets.
+ *
+ * The sole output of this script is config.dq.yml — a single YAML file the
+ * developer reviews and owns before anything is installed. No Drupal code is
+ * touched here; dq:scaffold is what actually builds the site.
  *
  * Without flags — copies the template and exits. The user edits the file
  * then runs `composer exec dq-install`.
@@ -120,8 +132,17 @@ if (is_dir($skinsDir)) {
     }
 }
 $themeSkin = choose('Design skin', $skins, 'minimal');
+// TODO (long-term): Once dq_starterkit ships as its own drupal-theme Composer
+// package, read available skins from the installed package metadata rather than
+// from this package's starterkits/skins/ directory.
 
 // Recipes
+// core/recipes/standard is always seeded as the base recipe — it installs the
+// standard content types and config that other recipes depend on. Additional
+// recipes are sourced from the registry (templates/recipe-registry.json), which
+// lists both bundled recipes (shipped inside this package) and future external
+// packages. Core/* and contrib/* paths can be added manually to config.dq.yml
+// after generation if needed.
 $registryFile = $packageRoot . '/templates/recipe-registry.json';
 $registry     = file_exists($registryFile)
     ? json_decode(file_get_contents($registryFile), true)

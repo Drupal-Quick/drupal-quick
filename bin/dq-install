@@ -2,18 +2,31 @@
 <?php
 
 /**
- * dq-install: Resolves and installs recipe Composer packages declared in
- * config.dq.yml.
+ * dq-install: Step 2 of the drupalquick workflow.
  *
- * For each recipe key that matches a drupalquick-managed recipe in the
- * registry, this script:
- *   1. Adds the recipe's VCS repository to the project composer.json.
- *   2. Runs `composer require` to download the package and its dependencies.
+ * Full workflow:
+ *   1. composer exec dq-init    — creates config.dq.yml
+ *   2. composer exec dq-install — THIS SCRIPT
+ *   3. drush dq:scaffold        — installs Drupal and builds the site
  *
- * Core and contrib recipe paths are passed through untouched — they are
- * already resolvable by Composer without any extra repository entries.
+ * Reads config.dq.yml and resolves each recipe against the registry
+ * (templates/recipe-registry.json). Registry entries come in two kinds:
  *
- * Run this after editing config.dq.yml and before `drush dq:scaffold`.
+ *   bundled  — The recipe ships inside this package (e.g. recipes/blog/).
+ *              No Composer action needed; dq:scaffold resolves the path
+ *              directly from the vendor directory at runtime.
+ *
+ *   external — The recipe is a standalone Composer package on GitHub.
+ *              This script registers its VCS repository in the project's
+ *              composer.json and runs `composer require` to install it.
+ *
+ * Core and contrib recipe paths (e.g. "core/recipes/standard") are not in
+ * the registry and require no Composer action — they ship with Drupal core.
+ *
+ * Also ensures drupal/core-recipe-unpack is present as a root-level project
+ * dependency. Composer only activates plugins declared at the root level, so
+ * this package cannot declare it on the project's behalf — it must live in
+ * the consumer's own composer.json.
  */
 
 $packageRoot = dirname(__DIR__);
@@ -50,6 +63,11 @@ if (empty($recipes)) {
 }
 
 // ------------------------------------------------------------------ Registry
+// The registry maps short recipe keys to their package metadata. Each entry
+// declares: package name, VCS url, install path, whether it is bundled inside
+// drupal-quick, and whether it ships theme-assets. Entries absent from the
+// registry are treated as literal paths (e.g. core/recipes/standard) and need
+// no Composer action here — dq:scaffold passes them directly to drush recipe.
 
 $registryFile = $packageRoot . '/templates/recipe-registry.json';
 if (!file_exists($registryFile)) {
@@ -65,6 +83,30 @@ if (!file_exists($composerFile)) {
 }
 $composer = json_decode(file_get_contents($composerFile), true);
 
+// ------------------------------------------------------------------ Peer deps
+
+// drupal/core-recipe-unpack must be a root-level dependency of the consumer
+// project for recipe Composer dependencies to be unpacked correctly.
+$peerPackage = 'drupal/core-recipe-unpack';
+$rootRequire = array_merge(
+    array_keys($composer['require'] ?? []),
+    array_keys($composer['require-dev'] ?? [])
+);
+if (!in_array($peerPackage, $rootRequire, true)) {
+    echo "📎 Adding {$peerPackage} to project composer.json...\n";
+    $composer['require'][$peerPackage] = '^1.0';
+    file_put_contents(
+        $composerFile,
+        json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
+    );
+    passthru("composer require {$peerPackage}", $exitCode);
+    if ($exitCode !== 0) {
+        echo "❌ Failed to install {$peerPackage}. Recipes with Composer dependencies may not unpack correctly.\n";
+    }
+    // Re-read composer after require rewrites it.
+    $composer = json_decode(file_get_contents($composerFile), true);
+}
+
 // ------------------------------------------------------------------ Resolve
 
 $toRequire = [];
@@ -75,7 +117,22 @@ foreach ($recipes as $recipe) {
         continue;
     }
 
-    $info    = $registry[$recipe];
+    $info = $registry[$recipe];
+
+    // Bundled recipes ship inside this package at recipes/{name}/ and are
+    // resolved to an absolute vendor path by dq:scaffold at runtime. No
+    // Composer action is needed here.
+    //
+    // TODO (long-term): When a bundled recipe is extracted into its own package
+    // (e.g. drupal-quick/recipe-blog at https://github.com/Drupal-Quick/recipe-blog),
+    // remove "bundled": true from its registry entry and set "url" to the real
+    // GitHub URL. This block will then be skipped and the recipe will be installed
+    // as an external package via the VCS + require logic below.
+    if (!empty($info['bundled'])) {
+        echo "ℹ️  '{$recipe}' is bundled with drupal-quick — skipping install.\n";
+        continue;
+    }
+
     $package = $info['package'];
     $url     = $info['url'];
 

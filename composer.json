@@ -1,12 +1,15 @@
 {
-    "name": "your-namespace/drupalquick",
+    "name": "drupal-quick/drupal-quick",
     "description": "Unified site scaffolding via Starterkits and Recipes with Tailwind/Vite skinning compilation pipeline.",
     "type": "drupal-drush",
     "license": "GPL-2.0-or-later",
     "require": {
         "php": ">=8.1",
         "symfony/yaml": "^6.0 || ^7.0",
-        "drupal/core-recipe-unpack": "^1.0" 
+        "drush/drush": "^12.5 || ^13"
+    },
+    "suggest": {
+        "drupal/core-recipe-unpack": "Required in the consumer project for recipe Composer dependencies to be unpacked into the project's own composer.json."
     },
     "bin": [
         "bin/dq-init",
@@ -20,7 +23,7 @@
     "extra": {
         "drush": {
             "services": {
-                "drush.services.yml": "^11 || ^12 || ^13"
+                "drush.services.yml": "^12.5 || ^13"
             }
         }
     }

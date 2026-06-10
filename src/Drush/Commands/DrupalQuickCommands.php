@@ -8,11 +8,38 @@ use Drush\Drush;
 
 /**
  * Drush commands for drupalquick site scaffolding.
+ *
+ * dq:scaffold orchestrates the full site build driven by config.dq.yml:
+ *   1. Installs Drupal with the minimal profile.
+ *   2. Generates a custom theme by copying the bundled starterkit, applying
+ *      the chosen skin, and injecting CSS custom properties.
+ *   3. Applies each recipe in declaration order, injecting recipe-specific
+ *      theme assets (templates, includes) into the generated theme as it goes.
+ *   4. Runs post-recipe config overrides declared in config.dq.yml parameters.
+ *   5. Compiles theme assets via npm/Vite.
+ *
+ * dq:cleanup removes all scaffolding artifacts (config.dq.yml and this
+ * package itself), leaving a self-contained Drupal project.
+ *
+ * Path context: Drush bootstraps with getcwd() set to DRUPAL_ROOT (web/).
+ * Relative paths throughout this file resolve from there. Absolute paths are
+ * used for anything that lives outside the webroot (vendor/, etc.).
  */
 class DrupalQuickCommands extends DrushCommands {
 
   /**
    * Returns the recipe registry, keyed by short recipe name.
+   *
+   * Each entry may contain:
+   *   package      — Composer package name (e.g. drupal-quick/recipe-blog)
+   *   url          — VCS URL used by dq-install for external recipes
+   *   path         — Recipe directory path: relative to package root for
+   *                  bundled recipes, relative to project root for external
+   *   bundled      — TRUE when the recipe ships inside this package
+   *   theme_assets — TRUE when the recipe ships a theme-assets/ directory
+   *
+   * Keys absent from the registry are treated as literal paths by resolvePath()
+   * and passed directly to drush recipe (e.g. "core/recipes/standard").
    */
   private function registry(): array {
     $file = dirname(__DIR__, 3) . '/templates/recipe-registry.json';
@@ -23,15 +50,33 @@ class DrupalQuickCommands extends DrushCommands {
   }
 
   /**
-   * Resolves a recipe entry to the path drush recipe expects.
+   * Resolves a recipe key to the path drush recipe expects.
    *
-   * Short keys (e.g. "blog") are looked up in the registry and translated to
-   * their vendor path. Everything else is passed through as-is.
+   * Bundled registry entries are resolved to an absolute path inside vendor/
+   * so drush recipe can find them regardless of working directory.
+   *
+   * Non-registry entries (core/*, contrib/*) are passed through unchanged —
+   * Drupal's recipe system resolves them relative to DRUPAL_ROOT.
+   *
+   * @todo (long-term) External registry entries (bundled: false) currently
+   *   return a path relative to the project root (e.g. vendor/drupal-quick/
+   *   recipe-blog). Since getcwd() is DRUPAL_ROOT (web/), that relative path
+   *   will not resolve. When the first external recipe is added, update the
+   *   non-bundled branch to return an absolute path:
+   *     return dirname(__DIR__, 6) . '/' . $info['path'];
+   *   where dirname(__DIR__, 6) is the Composer project root.
    */
   private function resolvePath(string $recipe, array $registry): string {
-    return isset($registry[$recipe])
-      ? $registry[$recipe]['path']
-      : $recipe;
+    if (!isset($registry[$recipe])) {
+      return $recipe;
+    }
+    $info = $registry[$recipe];
+    // Bundled recipes live inside the drupal-quick package. Return an absolute
+    // path so drush recipe can find them regardless of the working directory.
+    if (!empty($info['bundled'])) {
+      return dirname(__DIR__, 3) . '/' . $info['path'];
+    }
+    return $info['path'];
   }
 
   /**
@@ -51,7 +96,10 @@ class DrupalQuickCommands extends DrushCommands {
    * only functions from applied recipes are ever present in the theme.
    */
   private function copyThemeAssets(string $recipePath, string $themeName): void {
-    $assetsDir = getcwd() . "/{$recipePath}/theme-assets";
+    // recipePath may be an absolute path (bundled recipes) or relative to the
+    // Drupal root (core/contrib recipes). Detect and prefix accordingly.
+    $base      = str_starts_with($recipePath, '/') ? '' : getcwd() . '/';
+    $assetsDir = $base . rtrim($recipePath, '/') . '/theme-assets';
     if (!is_dir($assetsDir)) {
       return;
     }
@@ -170,6 +218,11 @@ class DrupalQuickCommands extends DrushCommands {
     $parameters  = $config['parameters'] ?? [];
 
     // 1. Install Drupal.
+    // The minimal profile is intentional — it installs the bare minimum with
+    // no content types, views, or default blocks. Recipes applied in step 3
+    // layer in exactly what the project needs, keeping the installed config
+    // set clean. Using the standard profile here would produce config that
+    // recipes then partially override, leaving orphaned configuration behind.
     $this->output()->writeln('⚙️  Installing Drupal...');
     Drush::drush(Drush::aliasManager()->getSelf(), 'site:install', ['minimal'], [
       'site-name'    => $siteName,
@@ -179,14 +232,45 @@ class DrupalQuickCommands extends DrushCommands {
     ])->mustRun();
 
     // 2. Generate theme from starterkit.
+    // copyDirectory() replicates what Drupal's GenerateThemeCommand does
+    // internally: recursive copy with STARTERKIT → machine name substitution
+    // in both filenames and text file contents. We then post-process the
+    // .info.yml to restore the human-readable title and strip starterkit: true
+    // so the generated theme is not treated as a starterkit by Drupal's UI.
+    //
+    // We call copyDirectory() directly rather than delegating to
+    // drush theme:starterkit because that command requires the starterkit to be
+    // discoverable by Drupal's theme system, which does not scan vendor/.
+    //
+    // @todo (long-term) Extract dq_starterkit into its own Composer package of
+    //   type "drupal-theme" (e.g. drupal-quick/dq-starterkit) and add it as a
+    //   "require" here. Composer's installer will place it at
+    //   web/themes/contrib/dq_starterkit/ where Drupal can discover it. Replace
+    //   the copyDirectory() block below with a native drush theme:starterkit
+    //   call and remove the manual .info.yml post-processing.
     if ($themeName) {
       $this->output()->writeln("🎨 Generating theme '{$themeName}' from starterkit...");
-      $starterkitPath = dirname(__DIR__, 3) . '/starterkits/dq_starterkit';
 
-      Drush::drush(Drush::aliasManager()->getSelf(), 'theme:starterkit', [$themeName], [
-        'theme-name' => $themeTitle,
-        'starterkit' => $starterkitPath,
-      ])->mustRun();
+      $starterkitSource = dirname(__DIR__, 3) . '/starterkits/dq_starterkit';
+      $themeDir         = getcwd() . "/themes/custom/{$themeName}";
+      $customThemesDir  = getcwd() . '/themes/custom';
+
+      if (!is_dir($customThemesDir)) {
+        mkdir($customThemesDir, 0755, TRUE);
+      }
+
+      $this->copyDirectory($starterkitSource, $themeDir, $themeName);
+
+      // copyDirectory replaces STARTERKIT with the machine name throughout,
+      // including the name: field in .info.yml. Overwrite it with the
+      // human-readable title from config.
+      $infoFile = "{$themeDir}/{$themeName}.info.yml";
+      if (file_exists($infoFile)) {
+        $info = file_get_contents($infoFile);
+        $info = preg_replace('/^name:.+$/m', "name: '{$themeTitle}'", $info);
+        $info = preg_replace('/^starterkit:\s*true\s*\n?/m', '', $info);
+        file_put_contents($infoFile, $info);
+      }
 
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
       Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ['system.theme', 'default', $themeName], ['yes' => TRUE])->mustRun();
@@ -223,10 +307,17 @@ class DrupalQuickCommands extends DrushCommands {
     }
 
     // 3. Apply recipes.
-    // Short registry keys are translated to their vendor path; everything
-    // else (core/contrib paths) is passed through unchanged. After each
-    // registry-managed recipe is applied, any theme-assets it ships are
-    // copied into the generated theme.
+    // Recipes are applied in the order declared in config.dq.yml. resolvePath()
+    // translates registry keys to paths drush recipe can locate; core/* and
+    // contrib/* paths are passed through unchanged. After each registry-managed
+    // recipe with theme_assets: true, its templates/ and includes/ are merged
+    // into the generated theme directory so only assets from applied recipes
+    // are present in the theme.
+    //
+    // @todo (long-term) As bundled recipes graduate to their own packages,
+    //   update each registry entry (remove "bundled": true, add real VCS url)
+    //   and update resolvePath() to return absolute paths for external entries
+    //   (see the @todo in that method).
     if (!empty($recipes)) {
       $this->output()->writeln('📦 Applying Drupal recipes...');
       foreach ($recipes as $recipe) {
@@ -245,6 +336,11 @@ class DrupalQuickCommands extends DrushCommands {
     }
 
     // 4. Post-recipe config overrides.
+    // The recipe_config block in config.dq.yml allows arbitrary drush config:set
+    // calls after all recipes have been applied. Running these last ensures they
+    // win over any defaults a recipe may have set (e.g. site slogan, front page
+    // path, date formats). Recipes cannot anticipate every project-level
+    // preference, so this is the escape hatch for the remainder.
     if (!empty($parameters['recipe_config'])) {
       $this->output()->writeln('⚙️  Applying recipe_config parameter overrides...');
       foreach ($parameters['recipe_config'] as $configName => $settings) {
@@ -257,6 +353,10 @@ class DrupalQuickCommands extends DrushCommands {
     }
 
     // 5. Build the theme.
+    // Runs `npm install && npm run build` inside the generated theme directory.
+    // The theme uses Vite with Tailwind CSS v4; the build outputs dist/main.js
+    // and dist/main.css which the theme's .libraries.yml references. Set
+    // build: false in config.dq.yml to skip this and build manually or in CI.
     if ($themeName && $themeBuild) {
       $themeDir = getcwd() . "/themes/custom/{$themeName}";
       $this->output()->writeln("🔨 Building theme assets (npm install && npm run build)...");
@@ -316,10 +416,10 @@ class DrupalQuickCommands extends DrushCommands {
     }
 
     $this->output()->writeln('🧹 Removing drupalquick package via Composer...');
-    passthru('composer remove your-namespace/drupalquick', $exitCode);
+    passthru('composer remove drupal-quick/drupal-quick', $exitCode);
 
     if ($exitCode !== 0) {
-      $this->logger()->error('Composer remove failed. Run `composer remove your-namespace/drupalquick` manually.');
+      $this->logger()->error('Composer remove failed. Run `composer remove drupal-quick/drupal-quick` manually.');
       return 1;
     }
 
