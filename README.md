@@ -78,7 +78,7 @@ parameters:
 
 ## What gets generated
 
-- A custom theme at `web/themes/custom/{machine_name}/` built with Vite and Tailwind CSS v4
+- A custom theme at `web/themes/custom/{machine_name}/`, generated from the bundled `dq_starterkit` via Drupal core's `generate-theme` command and built with Vite and Tailwind CSS v4
 - A chosen design skin baked into the theme as a CSS token layer
 - CSS custom properties from `theme_design` written into the theme
 - Recipe-specific Twig templates and PHP preprocess includes merged into the theme
@@ -88,11 +88,11 @@ parameters:
 
 ## To do
 
-- **Separate starterkit package** — Extract `dq_starterkit` into its own Composer package of type `drupal-theme` (`drupal-quick/dq-starterkit`). This allows Composer to place it at `web/themes/contrib/dq_starterkit/` where Drupal's theme system can discover it natively, enabling the scaffold to delegate to `drush theme:starterkit` rather than copying the directory manually.
+- **Separate starterkit package** — Extract `dq_starterkit` into its own Composer package of type `drupal-theme` (`drupal-quick/dq-starterkit`). Today the scaffold already delegates theme generation to Drupal core's `generate-theme` command, but because this package installs outside the web root it first stages the starterkit into `web/themes/` so theme discovery can find it, then removes the copy. Shipping `dq_starterkit` as a `drupal-theme` package would place it at `web/themes/contrib/dq_starterkit/` where Drupal discovers it natively, letting the scaffold point `generate-theme` straight at the installed theme and drop the staging step.
 
 - **Separate recipe packages** — Extract bundled recipes (currently `recipes/blog/`) into standalone Composer packages (e.g. `drupal-quick/recipe-blog`). Update the registry to remove `bundled: true` and point to real GitHub URLs. The `dq-install` script already handles the VCS registration and `composer require` flow for external recipes.
 
-- **Fix external recipe path resolution** — When the first non-bundled external recipe ships, update `resolvePath()` in `DrupalQuickCommands.php` to return an absolute path for external entries. The current passthrough returns a path relative to the project root, which does not resolve correctly from Drush's working directory (`DRUPAL_ROOT`).
+- **Fix external recipe path resolution** — When the first non-bundled external recipe ships, update `resolvePath()` in `DrupalQuickCommands.php` to return an absolute path for external entries. The current passthrough returns a path relative to the project root (e.g. `vendor/drupal-quick/recipe-blog`), which is fragile when handed to the `drush recipe` subprocess; bundled recipes already resolve to absolute paths, and external ones should too (build them from the project root, as `drupalRoot()` does for the web root).
 
 - **Build out the recipe library** — Add recipes beyond the blog POC. Each recipe should ship a `theme-assets/` directory with templates and preprocess includes where relevant.
 
