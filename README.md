@@ -33,6 +33,47 @@ To remove all scaffolding artifacts once the site is built:
 drush dq:cleanup
 ```
 
+### Running the build with DDEV
+
+The same flow works inside [DDEV](https://ddev.com) — run every command through
+`ddev` so it executes in the web container, which already provides PHP, Composer,
+a database, and Node/npm for the theme build.
+
+```bash
+# 1. Create and start the DDEV project
+mkdir my-site && cd my-site
+ddev config --project-type=drupal --docroot=web --nodejs-version=20
+ddev start
+ddev composer create-project drupal/recommended-project .
+
+# 2. Add this package. Until a tagged release is published on Packagist,
+#    register the repository and require the dev branch explicitly.
+ddev composer config repositories.drupal-quick vcs https://github.com/Drupal-Quick/drupal-quick
+ddev composer require "drupal-quick/drupal-quick:dev-main"
+
+# 3. Generate config.dq.yml (use -- so flags pass through to the script)
+ddev composer exec -- dq-init            # add: -- dq-init --interactive --ddev
+
+# 4. Edit config.dq.yml, then install any recipe packages
+ddev composer exec -- dq-install
+
+# 5. Run the scaffold (installs Drupal, generates theme, applies recipes, builds assets)
+ddev drush dq:scaffold
+```
+
+Clean up the same way:
+
+```bash
+ddev drush dq:cleanup
+```
+
+Notes:
+
+- `--nodejs-version=20` ensures the web container has a recent Node for the Vite
+  build. Set `theme.build: false` in `config.dq.yml` to skip the npm build.
+- `generate-theme` is invoked inside the container automatically by `dq:scaffold`;
+  no extra step is needed.
+
 ---
 
 ## config.dq.yml
