@@ -5,18 +5,21 @@ declare(strict_types=1);
 /**
  * Registration helper — must be defined before the glob loads includes.
  *
- * Recipe-injected .theme.inc files call STARTERKIT_add_preprocessor() to
- * register closures for specific template hooks. When drush theme:starterkit
- * generates the custom theme, STARTERKIT is replaced with the real machine
- * name throughout, so the helper and its callers always share the same name.
+ * Recipe-injected .theme.inc files register preprocess closures by calling this
+ * helper. When the theme is generated, `drupal generate-theme` rewrites the
+ * starterkit's machine name (dq_starterkit) to the new theme's machine name
+ * throughout, so this helper ends up named e.g. my_theme_add_preprocessor().
+ * Recipe assets are injected by dq:scaffold after generation and carry a
+ * STARTERKIT token that dq:scaffold replaces with the same machine name, so the
+ * helper and its callers always resolve to the same function.
  *
  * This pattern is aligned with Drupal core's own direction: issue #3266641
  * on drupal.org opened the theme system to PHP callables as preprocess
  * callbacks, and Drupal 11.3+ deprecates magic function-name discovery in
  * favour of explicit callback registration via hook_theme_registry_alter().
  */
-function STARTERKIT_add_preprocessor(string $hook, callable $fn): void {
-  $GLOBALS['_preprocessors']['STARTERKIT'][$hook][] = $fn;
+function dq_starterkit_add_preprocessor(string $hook, callable $fn): void {
+  $GLOBALS['_preprocessors']['dq_starterkit'][$hook][] = $fn;
 }
 
 /**
@@ -38,8 +41,8 @@ foreach (glob(__DIR__ . '/includes/*.theme.inc') as $_include) {
  * same hook (e.g. 'page') without any conflict — they are sequential
  * entries in the same array, called in the order recipes were applied.
  */
-function STARTERKIT_preprocess(array &$variables, string $hook): void {
-  foreach ($GLOBALS['_preprocessors']['STARTERKIT'][$hook] ?? [] as $fn) {
+function dq_starterkit_preprocess(array &$variables, string $hook): void {
+  foreach ($GLOBALS['_preprocessors']['dq_starterkit'][$hook] ?? [] as $fn) {
     $fn($variables, $hook);
   }
 }
@@ -51,7 +54,7 @@ function STARTERKIT_preprocess(array &$variables, string $hook): void {
  * HMR assets served from localhost:5173. The vite.config.js writes a
  * .vite-dev marker file on server start and removes it on close/build.
  */
-function STARTERKIT_page_attachments_alter(array &$attachments): void {
+function dq_starterkit_page_attachments_alter(array &$attachments): void {
   $theme  = \Drupal::theme()->getActiveTheme();
   $marker = DRUPAL_ROOT . '/' . $theme->getPath() . '/.vite-dev';
 
@@ -89,13 +92,13 @@ function STARTERKIT_page_attachments_alter(array &$attachments): void {
 /**
  * Implements hook_preprocess_HOOK() for html templates.
  */
-function STARTERKIT_preprocess_html(array &$variables): void {
+function dq_starterkit_preprocess_html(array &$variables): void {
   $variables['attributes']['class'][] = 'antialiased';
 }
 
 /**
  * Implements hook_preprocess_HOOK() for page templates.
  */
-function STARTERKIT_preprocess_page(array &$variables): void {
+function dq_starterkit_preprocess_page(array &$variables): void {
   $variables['has_sidebar'] = !empty($variables['page']['sidebar']);
 }
