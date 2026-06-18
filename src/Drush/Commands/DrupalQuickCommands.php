@@ -21,9 +21,12 @@ use Drush\Drush;
  * dq:cleanup removes all scaffolding artifacts (config.dq.yml and this
  * package itself), leaving a self-contained Drupal project.
  *
- * Path context: Drush bootstraps with getcwd() set to DRUPAL_ROOT (web/).
- * Relative paths throughout this file resolve from there. Absolute paths are
- * used for anything that lives outside the webroot (vendor/, etc.).
+ * Path context: getcwd() is the directory Drush was invoked from — normally
+ * the Composer project root (one level above the web docroot), which is where
+ * config.dq.yml lives. The Drupal web root is obtained from $this->drupalRoot();
+ * all theme and webroot-relative writes are anchored to it so they work
+ * regardless of where Drush is run from. Package-internal assets (starterkit,
+ * skins, bundled recipes) are addressed with absolute paths via __DIR__.
  */
 class DrupalQuickCommands extends DrushCommands {
 
@@ -41,6 +44,20 @@ class DrupalQuickCommands extends DrushCommands {
    * Keys absent from the registry are treated as literal paths by resolvePath()
    * and passed directly to drush recipe (e.g. "core/recipes/standard").
    */
+  /**
+   * Returns the Drupal web root (the docroot, e.g. the project's web/ dir).
+   *
+   * Resolved via Drush's bootstrap manager rather than \Drupal::root() because
+   * dq:scaffold runs before/around a site:install and the service container is
+   * not guaranteed to be initialized when these paths are needed. getcwd() is
+   * not used here either: Drush is normally invoked from the project root (one
+   * level above the docroot), which is where config.dq.yml lives, not where
+   * themes belong.
+   */
+  private function drupalRoot(): string {
+    return \Drush\Drush::bootstrapManager()->getRoot();
+  }
+
   private function registry(): array {
     $file = dirname(__DIR__, 3) . '/templates/recipe-registry.json';
     if (!file_exists($file)) {
@@ -98,13 +115,13 @@ class DrupalQuickCommands extends DrushCommands {
   private function copyThemeAssets(string $recipePath, string $themeName): void {
     // recipePath may be an absolute path (bundled recipes) or relative to the
     // Drupal root (core/contrib recipes). Detect and prefix accordingly.
-    $base      = str_starts_with($recipePath, '/') ? '' : getcwd() . '/';
+    $base      = str_starts_with($recipePath, '/') ? '' : $this->drupalRoot() . '/';
     $assetsDir = $base . rtrim($recipePath, '/') . '/theme-assets';
     if (!is_dir($assetsDir)) {
       return;
     }
 
-    $themeDir = getcwd() . "/themes/custom/{$themeName}";
+    $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
     $this->copyDirectory($assetsDir, $themeDir, $themeName);
     $this->output()->writeln("   Injected theme assets from {$recipePath}");
   }
@@ -117,7 +134,19 @@ class DrupalQuickCommands extends DrushCommands {
    * recognised text file types.
    */
   private function copyDirectory(string $src, string $dest, string $themeName = ''): void {
-    $textTypes = ['php', 'inc', 'twig', 'yml', 'yaml', 'js', 'css', 'md', 'txt'];
+    // Extensions whose contents get STARTERKIT → machine-name substitution.
+    // 'theme' is essential: the starterkit's .theme file defines the hook
+    // functions (STARTERKIT_preprocess, the add_preprocessor helper, etc.) that
+    // must be renamed to match the generated theme, or Drupal won't invoke them
+    // and recipe includes calling the helper will hit an undefined function.
+    $textTypes = ['php', 'inc', 'module', 'install', 'theme', 'engine', 'profile', 'twig', 'yml', 'yaml', 'js', 'css', 'md', 'txt'];
+
+    // Ensure the destination root exists before copying. The iterator below
+    // only creates subdirectories as it encounters them, so files living at the
+    // top level of $src would otherwise fail to write when $dest is absent.
+    if (!is_dir($dest)) {
+      mkdir($dest, 0755, TRUE);
+    }
 
     $iterator = new \RecursiveIteratorIterator(
       new \RecursiveDirectoryIterator($src, \RecursiveDirectoryIterator::SKIP_DOTS),
@@ -252,8 +281,8 @@ class DrupalQuickCommands extends DrushCommands {
       $this->output()->writeln("🎨 Generating theme '{$themeName}' from starterkit...");
 
       $starterkitSource = dirname(__DIR__, 3) . '/starterkits/dq_starterkit';
-      $themeDir         = getcwd() . "/themes/custom/{$themeName}";
-      $customThemesDir  = getcwd() . '/themes/custom';
+      $themeDir         = $this->drupalRoot() . "/themes/custom/{$themeName}";
+      $customThemesDir  = $this->drupalRoot() . '/themes/custom';
 
       if (!is_dir($customThemesDir)) {
         mkdir($customThemesDir, 0755, TRUE);
@@ -272,12 +301,15 @@ class DrupalQuickCommands extends DrushCommands {
         file_put_contents($infoFile, $info);
       }
 
+      // Enable the theme now so it exists while recipes are applied. Setting it
+      // as the site default is deferred until after recipes run (see step 3.5),
+      // because recipes such as core/recipes/standard set their own default
+      // theme (Olivero) and would otherwise clobber this selection.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
-      Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ['system.theme', 'default', $themeName], ['yes' => TRUE])->mustRun();
 
       // Bake the chosen skin into the generated theme.
       $skinSrc  = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
-      $skinDest = "themes/custom/{$themeName}/src/theme-skin.css";
+      $skinDest = "{$themeDir}/src/theme-skin.css";
       if (file_exists($skinSrc)) {
         $this->output()->writeln("🖌️  Applying '{$themeStyle}' skin tokens...");
         $dir = dirname($skinDest);
@@ -293,7 +325,7 @@ class DrupalQuickCommands extends DrushCommands {
       // Write theme_design parameters as CSS custom properties.
       if (!empty($parameters['theme_design'])) {
         $this->output()->writeln('🎨 Injecting theme_design parameters as CSS custom properties...');
-        $cssDir = "themes/custom/{$themeName}/css";
+        $cssDir = "{$themeDir}/css";
         if (!is_dir($cssDir)) {
           mkdir($cssDir, 0755, TRUE);
         }
@@ -335,6 +367,15 @@ class DrupalQuickCommands extends DrushCommands {
       }
     }
 
+    // 3.5. Set the generated theme as the site default.
+    // Deferred until after recipes so it wins over any default theme a recipe
+    // sets (core/recipes/standard sets Olivero). The theme was already enabled
+    // in step 2 so it exists and is ready to become the active default here.
+    if ($themeName) {
+      $this->output()->writeln("🎨 Setting '{$themeName}' as the default theme...");
+      Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ['system.theme', 'default', $themeName], ['yes' => TRUE])->mustRun();
+    }
+
     // 4. Post-recipe config overrides.
     // The recipe_config block in config.dq.yml allows arbitrary drush config:set
     // calls after all recipes have been applied. Running these last ensures they
@@ -358,7 +399,7 @@ class DrupalQuickCommands extends DrushCommands {
     // and dist/main.css which the theme's .libraries.yml references. Set
     // build: false in config.dq.yml to skip this and build manually or in CI.
     if ($themeName && $themeBuild) {
-      $themeDir = getcwd() . "/themes/custom/{$themeName}";
+      $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
       $this->output()->writeln("🔨 Building theme assets (npm install && npm run build)...");
 
       passthru("cd " . escapeshellarg($themeDir) . " && npm install && npm run build", $buildCode);
