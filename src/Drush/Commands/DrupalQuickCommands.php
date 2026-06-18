@@ -2,8 +2,9 @@
 
 namespace DrupalQuick\Drush\Commands;
 
+use Drupal\Component\Serialization\Json;
+use Drupal\Component\Serialization\Yaml;
 use Drush\Commands\DrushCommands;
-use Symfony\Component\Yaml\Yaml;
 use Drush\Drush;
 
 /**
@@ -63,7 +64,7 @@ class DrupalQuickCommands extends DrushCommands {
     if (!file_exists($file)) {
       return [];
     }
-    return json_decode(file_get_contents($file), true) ?? [];
+    return Json::decode(file_get_contents($file)) ?? [];
   }
 
   /**
@@ -215,7 +216,7 @@ class DrupalQuickCommands extends DrushCommands {
 
     $this->output()->writeln('⚡ [drupalquick] Processing configuration...');
     try {
-      $config = Yaml::parseFile($configFile);
+      $config = Yaml::decode(file_get_contents($configFile));
     }
     catch (\Exception $e) {
       $this->logger()->error('Error parsing config.dq.yml: ' . $e->getMessage());
