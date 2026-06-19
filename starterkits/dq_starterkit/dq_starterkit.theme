@@ -62,8 +62,10 @@ function dq_starterkit_page_attachments_alter(array &$attachments): void {
     return;
   }
 
-  $port   = trim(file_get_contents($marker)) ?: '5173';
-  $origin = "http://localhost:{$port}";
+  // The marker stores the dev server's full public origin (written by
+  // vite.config.js), e.g. https://my-site.ddev.site:5173 under DDEV or
+  // http://localhost:5173 on a bare host.
+  $origin = trim(file_get_contents($marker)) ?: 'http://localhost:5173';
 
   $attachments['#attached']['library'] = array_filter(
     $attachments['#attached']['library'] ?? [],

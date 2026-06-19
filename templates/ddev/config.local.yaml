@@ -3,10 +3,19 @@
 # This file is automatically ignored by DDEV's main config but read at runtime.
 
 php_version: "8.3"
-database:
-  type: mariadb
-  version: "10.11"
 
 # Add any custom environment variables or hooks required by your starterkit/recipes
 web_environment:
   - DRUPALQUICK_SCAFFOLDED=true
+
+# Expose the Vite dev server (started with `ddev npm run dev` inside the theme)
+# so the browser can reach it over the project's HTTPS hostname:
+#   https://<project>.ddev.site:5173
+# The starterkit's vite.config.js binds to 0.0.0.0 and derives this origin from
+# DDEV_HOSTNAME; the theme injects it only while the .vite-dev marker exists.
+# Run `ddev restart` after this file is added for the port to take effect.
+web_extra_exposed_ports:
+  - name: vite
+    container_port: 5173
+    http_port: 5172
+    https_port: 5173
