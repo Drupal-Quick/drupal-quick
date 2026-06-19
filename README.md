@@ -138,3 +138,5 @@ parameters:
 - **Build out the recipe library** — Add recipes beyond the blog POC. Each recipe should ship a `theme-assets/` directory with templates and preprocess includes where relevant.
 
 - **Skin discovery for dq-init** — Once the starterkit is a separate package, update the interactive wizard to read available skins from the installed package metadata rather than from this package's `starterkits/skins/` directory.
+
+- **User-extensible starterkits and recipes** — Let users supply their own starterkit themes and recipes the same way the first-party ones work, without editing `vendor/`: merge the registry from the built-in file, a `config.dq.yml` `sources:` section, and self-describing packages (`composer.json` `extra`); un-gate theme-asset injection from the registry; make the starterkit selectable in config; and ship skeleton templates plus `dq-init` config additions. Full design, prerequisites, and suggested phasing in [docs/extensibility.md](docs/extensibility.md).
