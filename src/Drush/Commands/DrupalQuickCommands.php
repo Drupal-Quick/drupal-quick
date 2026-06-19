@@ -457,6 +457,135 @@ class DrupalQuickCommands extends DrushCommands {
   }
 
   /**
+   * Resolves static-export settings.
+   *
+   * Persisted Drupal config (drupalquick.static) wins because it survives
+   * dq:cleanup, which deletes config.dq.yml. On the first run no persisted
+   * config exists yet, so the static: block in config.dq.yml seeds it.
+   */
+  private function staticSettings($self): array {
+    // config:get exits non-zero when the object does not exist yet; tolerate it.
+    $process = Drush::drush($self, 'config:get', ['drupalquick.static', '--format=json']);
+    $process->run();
+    if ($process->isSuccessful()) {
+      $persisted = Json::decode(trim((string) $process->getOutput())) ?: [];
+      if (!empty($persisted['target']) || !empty($persisted['uri'])) {
+        return $persisted;
+      }
+    }
+    $configFile = getcwd() . '/config.dq.yml';
+    if (file_exists($configFile)) {
+      $config = Yaml::decode(file_get_contents($configFile)) ?: [];
+      return $config['static'] ?? [];
+    }
+    return [];
+  }
+
+  /**
+   * Writes the deploy configuration for the chosen target into the project.
+   *
+   * netlify → netlify.toml at the project root.
+   * github  → .github/workflows/deploy-pages.yml.
+   * none    → nothing.
+   */
+  private function emitDeployTemplate(string $target): void {
+    $deployDir   = dirname(__DIR__, 3) . '/templates/deploy';
+    $projectRoot = getcwd();
+
+    if ($target === 'netlify') {
+      $src = "{$deployDir}/netlify.toml";
+      if (file_exists($src)) {
+        copy($src, "{$projectRoot}/netlify.toml");
+        $this->output()->writeln('   Wrote netlify.toml');
+      }
+    }
+    elseif ($target === 'github') {
+      $src     = "{$deployDir}/github-pages.yml";
+      $destDir = "{$projectRoot}/.github/workflows";
+      if (file_exists($src)) {
+        if (!is_dir($destDir)) {
+          mkdir($destDir, 0755, TRUE);
+        }
+        copy($src, "{$destDir}/deploy-pages.yml");
+        $this->output()->writeln('   Wrote .github/workflows/deploy-pages.yml');
+      }
+    }
+  }
+
+  /**
+   * Generates a static HTML export of the site with Tome and writes a deploy
+   * config for the configured target.
+   *
+   * Static export is a recurring, post-build operation, so it lives in this
+   * command rather than a recipe (recipes apply at build time and cannot run an
+   * export). Settings are seeded from the static: block in config.dq.yml on the
+   * first run and persisted to Drupal config (drupalquick.static) so they
+   * survive dq:cleanup, which deletes config.dq.yml.
+   *
+   * @command dq:static
+   * @aliases dqst
+   * @option base-url The production base URL for absolute links, passed to Tome as --uri (overrides config).
+   * @usage drush dq:static
+   * @usage drush dq:static --base-url=https://example.com
+   */
+  public function staticExport($options = ['base-url' => NULL]) {
+    $self = Drush::aliasManager()->getSelf();
+
+    // 1. Resolve settings (persisted config wins; fall back to config.dq.yml).
+    $settings = $this->staticSettings($self);
+    $target   = $settings['target'] ?? 'none';
+    $uri      = $options['base-url'] ?? ($settings['uri'] ?? NULL);
+
+    // 2. Ensure Tome static is installed and enabled.
+    $this->output()->writeln('📦 [drupalquick] Ensuring Tome static is available...');
+    $hasTome = trim((string) Drush::drush($self, 'php:eval', ["echo \\Drupal::moduleHandler()->moduleExists('tome_static') ? '1' : '0';"])->mustRun()->getOutput()) === '1';
+    if (!$hasTome) {
+      $this->output()->writeln('   Installing drupal/tome via Composer...');
+      passthru('composer require drupal/tome', $code);
+      if ($code !== 0) {
+        $this->logger()->error('composer require drupal/tome failed.');
+        return 1;
+      }
+      Drush::drush($self, 'pm:install', ['tome_static'], ['yes' => TRUE])->mustRun();
+    }
+
+    // 3. Persist settings to Drupal config so re-exports work after cleanup.
+    Drush::drush($self, 'config:set', ['drupalquick.static', 'target', $target], ['yes' => TRUE])->mustRun();
+    if ($uri) {
+      Drush::drush($self, 'config:set', ['drupalquick.static', 'uri', $uri], ['yes' => TRUE])->mustRun();
+    }
+
+    // 4. Preflight the active theme: it must be built, and the Vite dev marker
+    //    must be absent or the export would capture localhost dev-server tags.
+    $theme    = trim((string) Drush::drush($self, 'config:get', ['system.theme', 'default', '--format=string'])->mustRun()->getOutput());
+    $themeDir = $this->drupalRoot() . "/themes/custom/{$theme}";
+    if (is_dir($themeDir)) {
+      if (file_exists("{$themeDir}/.vite-dev")) {
+        $this->logger()->error("The Vite dev server appears to be running ({$theme}/.vite-dev exists). Stop it and run `npm run build` before exporting.");
+        return 1;
+      }
+      if (!file_exists("{$themeDir}/dist/main.css")) {
+        $this->logger()->warning("Theme '{$theme}' has no built assets (dist/main.css missing). Run `npm install && npm run build` in {$themeDir} for styled output.");
+      }
+    }
+
+    // 5. Run the static export.
+    $this->output()->writeln('🧊 [drupalquick] Generating static site with Tome...');
+    $opts = ['yes' => TRUE];
+    if ($uri) {
+      $opts['uri'] = $uri;
+    }
+    Drush::drush($self, 'tome:static', [], $opts)->mustRun();
+
+    // 6. Emit the deploy template for the chosen target.
+    $this->emitDeployTemplate($target);
+
+    $this->output()->writeln('✅ [drupalquick] Static export complete.');
+    $this->output()->writeln("   Output: html/ (Tome default; override via \$settings['tome_static_directory'] in settings.php).");
+    return 0;
+  }
+
+  /**
    * Removes drupalquick scaffolding artifacts from the project.
    *
    * Deletes config.dq.yml from the project root, then removes the

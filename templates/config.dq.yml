@@ -35,3 +35,14 @@ parameters:
   recipe_config:
     "system.site":
       slogan: "Scaffolded quickly, maintained sustainably."
+
+# Static site export (optional). Run `drush dq:static` to install Tome, export a
+# static HTML copy of the site to html/, and write a deploy config for the chosen
+# target. These values seed Drupal config (drupalquick.static) on first run so
+# they survive `drush dq:cleanup`, which deletes this file. See
+# docs/static-deploy.md for the full workflow and caveats.
+static:
+  # Deploy template to emit: netlify | github | none
+  target: "netlify"
+  # Production base URL for absolute links in the exported HTML (optional).
+  uri: "https://example.com"
