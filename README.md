@@ -27,10 +27,14 @@ composer exec dq-install
 drush dq:scaffold
 ```
 
-To remove all scaffolding artifacts once the site is built:
+To remove drupal-quick once the site is built — this removes the package itself
+(the tool deletes its own code), leaving a self-contained project. By default
+`config.dq.yml` is archived in place (commented out, kept as a reference of how
+the site was scaffolded); pass `--purge` to delete it entirely for zero trace:
 
 ```bash
-drush dq:cleanup
+drush dq:cleanup            # archive config.dq.yml + remove the package
+drush dq:cleanup --purge    # delete config.dq.yml + remove the package
 ```
 
 ### Running the build with DDEV

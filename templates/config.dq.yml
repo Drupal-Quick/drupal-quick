@@ -23,8 +23,9 @@ recipes:
   - "blog"
 
 parameters:
-  # Written into the generated theme as CSS custom properties (:root vars).
-  # Reference in templates as var(--dq-primary-color), etc.
+  # Written into the generated theme as CSS custom properties (:root vars),
+  # bundled into the theme's compiled CSS. Reference in templates/CSS as
+  # var(--primary-color), etc.
   theme_design:
     primary_color: "#10b981"
     secondary_color: "#1e3a8a"
