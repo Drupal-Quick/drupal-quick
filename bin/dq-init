@@ -226,4 +226,39 @@ function ddev_copy(string $packageRoot, string $projectRoot): void {
     } else {
         echo "❌ Failed to copy DDEV config to {$dest}\n";
     }
+
+    // Deliver the credentials example for `drush dq:static --deploy`. The real
+    // .ddev/.env.web (which DDEV loads into the web container) holds secrets and
+    // must stay out of git, so we copy a keys-only example and gitignore the
+    // real file rather than ever shipping a value placeholder.
+    $envExampleSrc = $packageRoot . '/templates/ddev/.env.web.example';
+    if (file_exists($envExampleSrc)) {
+        if (copy($envExampleSrc, $ddevDir . '/.env.web.example')) {
+            echo "✅ DDEV deploy-credentials example copied to .ddev/.env.web.example\n";
+        }
+        ddev_gitignore_env($projectRoot);
+    }
+}
+
+/**
+ * Ensures the project's .gitignore excludes the secret .ddev/.env.web file.
+ *
+ * DDEV's own auto-managed .ddev/.gitignore does not cover this custom file, so
+ * we add it to the project root .gitignore. The keys-only .env.web.example is
+ * intentionally left tracked.
+ */
+function ddev_gitignore_env(string $projectRoot): void {
+    $gitignore = $projectRoot . '/.gitignore';
+    $entry     = '.ddev/.env.web';
+    $existing  = file_exists($gitignore) ? file_get_contents($gitignore) : '';
+
+    if (preg_match('/^\s*' . preg_quote($entry, '/') . '\s*$/m', $existing)) {
+        return;
+    }
+
+    $prefix = ($existing !== '' && substr($existing, -1) !== "\n") ? "\n" : '';
+    $block  = "{$prefix}\n# drupalquick: deploy credentials (drush dq:static --deploy)\n{$entry}\n";
+    if (file_put_contents($gitignore, $block, FILE_APPEND) !== FALSE) {
+        echo "✅ Added {$entry} to .gitignore\n";
+    }
 }

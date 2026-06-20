@@ -27,10 +27,14 @@ composer exec dq-install
 drush dq:scaffold
 ```
 
-To remove all scaffolding artifacts once the site is built:
+To remove drupal-quick once the site is built — this removes the package itself
+(the tool deletes its own code), leaving a self-contained project. By default
+`config.dq.yml` is archived in place (commented out, kept as a reference of how
+the site was scaffolded); pass `--purge` to delete it entirely for zero trace:
 
 ```bash
-drush dq:cleanup
+drush dq:cleanup            # archive config.dq.yml + remove the package
+drush dq:cleanup --purge    # delete config.dq.yml + remove the package
 ```
 
 ### Running the build with DDEV
@@ -140,3 +144,5 @@ parameters:
 - **Skin discovery for dq-init** — Once the starterkit is a separate package, update the interactive wizard to read available skins from the installed package metadata rather than from this package's `starterkits/skins/` directory.
 
 - **User-extensible starterkits and recipes** — Let users supply their own starterkit themes and recipes the same way the first-party ones work, without editing `vendor/`: merge the registry from the built-in file, a `config.dq.yml` `sources:` section, and self-describing packages (`composer.json` `extra`); un-gate theme-asset injection from the registry; make the starterkit selectable in config; and ship skeleton templates plus `dq-init` config additions. Full design, prerequisites, and suggested phasing in [docs/extensibility.md](docs/extensibility.md).
+
+- **Static site export and deploy** — Ship the finished site as static HTML for a fast, footprint-free deploy. A `static:` block in `config.dq.yml` drives `drush dq:static`, which installs [Tome](https://tome.fyi), exports the site to `html/`, persists its settings to Drupal config (so they survive `dq:cleanup`), and writes a deploy config for the chosen target (Netlify / GitHub Pages). Currently a minimal prototype; rationale (config + command now, recipe later), caveats, and phasing in [docs/static-deploy.md](docs/static-deploy.md).
