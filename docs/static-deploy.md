@@ -78,7 +78,18 @@ static:
 ddev drush dq:static
 # or override the base URL ad hoc:
 ddev drush dq:static --base-url=https://example.com
+# export AND push to the configured target in one step:
+ddev drush dq:static --deploy
 ```
+
+`--deploy` runs after the export and pushes to the configured `target`. Only
+Netlify is automated for now: it runs `netlify deploy --prod --dir=html`, using a
+globally installed `netlify` CLI if present, otherwise `npx netlify-cli`. The CLI
+must be authenticated (`netlify login`, or a `NETLIFY_AUTH_TOKEN` env var) and the
+site linked (`netlify.toml` / `netlify link` / `NETLIFY_SITE_ID`). Because the
+command runs inside the DDEV web container, the CLI and credentials must be
+available there. GitHub Pages deploys via its own workflow (git push), so
+`--deploy` is a no-op for that target.
 
 `dq:static` will:
 
@@ -90,6 +101,7 @@ ddev drush dq:static --base-url=https://example.com
 5. Run `drush tome:static` (with `--uri` if configured).
 6. Write the deploy config for the target (`netlify.toml` or
    `.github/workflows/deploy-pages.yml`).
+7. With `--deploy`, push the export to the target (Netlify only for now).
 
 Output lands in `html/` (Tome's default; override with
 `$settings['tome_static_directory']` in `settings.php`).

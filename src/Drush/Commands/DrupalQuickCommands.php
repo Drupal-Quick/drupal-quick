@@ -525,10 +525,12 @@ class DrupalQuickCommands extends DrushCommands {
    * @command dq:static
    * @aliases dqst
    * @option base-url The production base URL for absolute links, passed to Tome as --uri (overrides config).
+   * @option deploy After exporting, deploy to the configured target (Netlify only for now).
    * @usage drush dq:static
    * @usage drush dq:static --base-url=https://example.com
+   * @usage drush dq:static --deploy
    */
-  public function staticExport($options = ['base-url' => NULL]) {
+  public function staticExport($options = ['base-url' => NULL, 'deploy' => FALSE]) {
     $self = Drush::aliasManager()->getSelf();
 
     // 1. Resolve settings (persisted config wins; fall back to config.dq.yml).
@@ -582,6 +584,44 @@ class DrupalQuickCommands extends DrushCommands {
 
     $this->output()->writeln('✅ [drupalquick] Static export complete.');
     $this->output()->writeln("   Output: html/ (Tome default; override via \$settings['tome_static_directory'] in settings.php).");
+
+    // 7. Optionally deploy the export to the configured target.
+    if ($options['deploy']) {
+      return $this->deployStatic($target);
+    }
+
+    return 0;
+  }
+
+  /**
+   * Deploys the static export (html/) to the configured target.
+   *
+   * Only Netlify is automated for now: it runs `netlify deploy --prod`, using a
+   * globally installed CLI if present, otherwise `npx netlify-cli`. The CLI must
+   * be authenticated (interactive `netlify login`, or NETLIFY_AUTH_TOKEN) and
+   * the site linked (via netlify.toml, `netlify link`, or NETLIFY_SITE_ID).
+   * GitHub Pages deploys via its own workflow (git push), so it is a no-op here.
+   */
+  private function deployStatic(string $target): int {
+    if ($target !== 'netlify') {
+      $this->logger()->warning("--deploy currently automates the 'netlify' target only. For '{$target}', deploy via its own workflow (e.g. git push for GitHub Pages).");
+      return 0;
+    }
+
+    // Prefer a globally installed CLI; fall back to npx (Node is available in
+    // the build environment for the theme's Vite build).
+    $bin = trim((string) shell_exec('command -v netlify 2>/dev/null'));
+    $cli = $bin !== '' ? 'netlify' : 'npx --yes netlify-cli';
+
+    $this->output()->writeln("🚀 [drupalquick] Deploying to Netlify ({$cli})...");
+    passthru("{$cli} deploy --prod --dir=html", $code);
+
+    if ($code !== 0) {
+      $this->logger()->error('Netlify deploy failed. Ensure the CLI is authenticated (run `netlify login`, or set NETLIFY_AUTH_TOKEN) and the site is linked (netlify.toml / `netlify link` / NETLIFY_SITE_ID). You can also deploy manually: `netlify deploy --prod --dir=html`.');
+      return $code;
+    }
+
+    $this->output()->writeln('✅ [drupalquick] Netlify deploy complete.');
     return 0;
   }
 
