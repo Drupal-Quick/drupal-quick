@@ -6,3 +6,43 @@
 [build]
   publish = "html"
   command = ""
+
+# --- Caching ----------------------------------------------------------------
+# Netlify applies the most specific matching rule, so the broad HTML default
+# below is overridden by the asset rules. Netlify also serves Brotli/gzip
+# automatically.
+
+# Content-hashed aggregates (filename changes when content changes) — cache
+# forever.
+[[headers]]
+  for = "/sites/default/files/css/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/sites/default/files/js/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Theme/core/library assets have stable names, so cache a day and revalidate
+# rather than pinning forever (a re-export may change them).
+[[headers]]
+  for = "/themes/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/core/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/libraries/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+# HTML: always revalidate so content changes appear immediately after a deploy.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

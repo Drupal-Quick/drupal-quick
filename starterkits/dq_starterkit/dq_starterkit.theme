@@ -96,6 +96,36 @@ function dq_starterkit_page_attachments_alter(array &$attachments): void {
  */
 function dq_starterkit_preprocess_html(array &$variables): void {
   $variables['attributes']['class'][] = 'antialiased';
+
+  // Inline the compiled theme CSS (it's tiny) so there's no render-blocking
+  // stylesheet request. Skipped while the Vite dev server is running, since
+  // HMR serves CSS live; the linked copy is removed in
+  // dq_starterkit_css_alter() to avoid loading it twice.
+  $themePath = \Drupal::theme()->getActiveTheme()->getPath();
+  $cssFile   = DRUPAL_ROOT . '/' . $themePath . '/dist/main.css';
+  if (!file_exists(DRUPAL_ROOT . '/' . $themePath . '/.vite-dev') && is_file($cssFile)) {
+    $variables['inline_css'] = file_get_contents($cssFile);
+  }
+}
+
+/**
+ * Implements hook_css_alter().
+ *
+ * The compiled theme CSS is inlined in html.html.twig (see preprocess_html), so
+ * remove the linked copy to prevent loading it twice. Core and module CSS are
+ * left untouched. In Vite dev mode the link is left in place (nothing is
+ * inlined; the dev server handles CSS).
+ */
+function dq_starterkit_css_alter(array &$css): void {
+  $themePath = \Drupal::theme()->getActiveTheme()->getPath();
+  if (file_exists(DRUPAL_ROOT . '/' . $themePath . '/.vite-dev')) {
+    return;
+  }
+  foreach (array_keys($css) as $key) {
+    if (str_contains($key, $themePath . '/dist/main.css')) {
+      unset($css[$key]);
+    }
+  }
 }
 
 /**
