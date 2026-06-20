@@ -1,10 +1,17 @@
-/* Entry stylesheet — Tailwind v4 CSS-first import */
+/* Entry stylesheet — Tailwind v4 CSS-first import.
+ *
+ * Tailwind v4 only processes @theme in this entry file (not in @import-ed
+ * files), so all theme tokens live here. dq:scaffold rewrites the block between
+ * the markers below, layering values in order: these defaults ← the chosen skin
+ * ← any overrides from config.dq.yml's theme_design. `static` forces the tokens
+ * to always emit as CSS variables, even if no utility uses them. */
 @import "tailwindcss";
 
-/* Skin tokens — replaced from the selected skin at build time; empty by
-   default so the theme compiles without a skin selection. */
-@import "./theme-skin.css";
-
-/* Design tokens — written from the site's theme_design config at build time;
-   empty by default. */
-@import "./theme-design.css";
+/* dq:theme:start */
+@theme static {
+  --color-primary: #1f2937;
+  --color-secondary: #4b5563;
+  --color-accent: #374151;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+/* dq:theme:end */

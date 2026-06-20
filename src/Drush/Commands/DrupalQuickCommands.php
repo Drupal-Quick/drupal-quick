@@ -200,6 +200,62 @@ class DrupalQuickCommands extends DrushCommands {
   }
 
   /**
+   * Extracts CSS custom property declarations (--name: value;) from CSS text.
+   *
+   * Used to read theme tokens from the starterkit's main.css and from a skin
+   * file so they can be merged. Returns an ordered map of token => value.
+   */
+  private function parseThemeTokens(string $css): array {
+    $tokens = [];
+    if (preg_match_all('/(--[\w-]+)\s*:\s*([^;]+);/', $css, $matches, PREG_SET_ORDER)) {
+      foreach ($matches as $match) {
+        $tokens[$match[1]] = trim($match[2]);
+      }
+    }
+    return $tokens;
+  }
+
+  /**
+   * Maps a config.dq.yml theme_design key to a Tailwind v4 @theme token name.
+   *
+   *   <name>_color → --color-<name>  (drives bg-/text-/border-<name> utilities)
+   *   font_family  → --font-sans
+   *   anything else → --<kebab-key>
+   */
+  private function designTokenName(string $key): string {
+    if (str_ends_with($key, '_color')) {
+      return '--color-' . str_replace('_', '-', substr($key, 0, -6));
+    }
+    if ($key === 'font_family') {
+      return '--font-sans';
+    }
+    return '--' . str_replace('_', '-', $key);
+  }
+
+  /**
+   * Rewrites the dq:theme block in main.css with the merged token set.
+   *
+   * The tokens go in a `@theme static` block in the entry stylesheet — the only
+   * place Tailwind v4 processes @theme — so they drive utilities and are always
+   * emitted as CSS variables. Replaces the content between the dq:theme markers.
+   */
+  private function writeThemeTokens(string $mainCss, array $tokens): void {
+    $block = "/* dq:theme:start */\n@theme static {\n";
+    foreach ($tokens as $name => $value) {
+      $block .= "  {$name}: {$value};\n";
+    }
+    $block .= "}\n/* dq:theme:end */";
+
+    $css = file_get_contents($mainCss);
+    $css = preg_replace('/\/\* dq:theme:start \*\/.*?\/\* dq:theme:end \*\//s', $block, $css, 1, $count);
+    if (!$count) {
+      // Markers missing (customized main.css) — append the block instead.
+      $css .= "\n" . $block . "\n";
+    }
+    file_put_contents($mainCss, $css);
+  }
+
+  /**
    * Scaffolds a Drupal site using config.dq.yml.
    *
    * @command dq:scaffold
@@ -350,33 +406,28 @@ class DrupalQuickCommands extends DrushCommands {
       // theme (Olivero) and would otherwise clobber this selection.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
 
-      // Bake the chosen skin into the generated theme.
-      $skinSrc  = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
-      $skinDest = "{$themeDir}/src/theme-skin.css";
+      // Build the theme tokens by layering: the starterkit defaults in main.css
+      // ← the chosen skin ← config.dq.yml theme_design. They must end up in the
+      // entry main.css @theme block, because Tailwind v4 only processes @theme
+      // there (not in @import-ed files). resolveThemeTokens() merges them and
+      // writeThemeTokens() rewrites the dq:theme block in main.css.
+      $this->output()->writeln("🖌️  Applying '{$themeStyle}' skin and theme_design tokens...");
+      $mainCss = "{$themeDir}/src/main.css";
+      $tokens  = $this->parseThemeTokens(file_get_contents($mainCss));
+
+      $skinSrc = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
       if (file_exists($skinSrc)) {
-        $this->output()->writeln("🖌️  Applying '{$themeStyle}' skin tokens...");
-        $dir = dirname($skinDest);
-        if (!is_dir($dir)) {
-          mkdir($dir, 0755, TRUE);
-        }
-        copy($skinSrc, $skinDest);
+        $tokens = array_merge($tokens, $this->parseThemeTokens(file_get_contents($skinSrc)));
       }
       else {
-        $this->logger()->warning("Skin '{$themeStyle}' not found at {$skinSrc}. Skipping skin step.");
+        $this->logger()->warning("Skin '{$themeStyle}' not found at {$skinSrc}. Using starterkit defaults.");
       }
 
-      // Write theme_design parameters as CSS custom properties into the theme's
-      // source so Vite bundles them into dist/main.css (main.css imports
-      // ./theme-design.css). Exposed as var(--primary-color) etc.
-      if (!empty($parameters['theme_design'])) {
-        $this->output()->writeln('🎨 Writing theme_design tokens into the theme build...');
-        $css = "/* Design tokens from config.dq.yml theme_design. */\n:root {\n";
-        foreach ($parameters['theme_design'] as $var => $value) {
-          $css .= '  --' . str_replace('_', '-', $var) . ": {$value};\n";
-        }
-        $css .= "}\n";
-        file_put_contents("{$themeDir}/src/theme-design.css", $css);
+      foreach ($parameters['theme_design'] ?? [] as $key => $value) {
+        $tokens[$this->designTokenName($key)] = $value;
       }
+
+      $this->writeThemeTokens($mainCss, $tokens);
     }
 
     // 3. Apply recipes.

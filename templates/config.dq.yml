@@ -23,9 +23,12 @@ recipes:
   - "blog"
 
 parameters:
-  # Written into the generated theme as CSS custom properties (:root vars),
-  # bundled into the theme's compiled CSS. Reference in templates/CSS as
-  # var(--primary-color), etc.
+  # Override the chosen skin's design tokens. Merged into the theme's Tailwind
+  # @theme block (default skin <- skin <- these), so they drive utilities and
+  # are emitted as CSS variables. Conventional keys map to Tailwind tokens:
+  #   <name>_color -> --color-<name>  (e.g. bg-primary, text-secondary, var())
+  #   font_family  -> --font-sans
+  # Other keys become --<kebab> theme tokens, usable as var(--key).
   theme_design:
     primary_color: "#10b981"
     secondary_color: "#1e3a8a"
