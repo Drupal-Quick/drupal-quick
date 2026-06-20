@@ -84,12 +84,36 @@ ddev drush dq:static --deploy
 
 `--deploy` runs after the export and pushes to the configured `target`. Only
 Netlify is automated for now: it runs `netlify deploy --prod --dir=html`, using a
-globally installed `netlify` CLI if present, otherwise `npx netlify-cli`. The CLI
-must be authenticated (`netlify login`, or a `NETLIFY_AUTH_TOKEN` env var) and the
-site linked (`netlify.toml` / `netlify link` / `NETLIFY_SITE_ID`). Because the
-command runs inside the DDEV web container, the CLI and credentials must be
-available there. GitHub Pages deploys via its own workflow (git push), so
-`--deploy` is a no-op for that target.
+globally installed `netlify` CLI if present, otherwise `npx netlify-cli`. GitHub
+Pages deploys via its own workflow (git push), so `--deploy` is a no-op for that
+target.
+
+### Deploy credentials
+
+`--deploy` runs inside the DDEV web container, so the credentials must be present
+there — and they are secrets, so they must stay out of version control. The
+mechanism:
+
+- `dq-init --ddev` delivers `.ddev/.env.web.example` (keys, no values) and adds
+  `.ddev/.env.web` to `.gitignore`.
+- Copy it and fill in your token:
+
+  ```bash
+  cp .ddev/.env.web.example .ddev/.env.web
+  # edit .ddev/.env.web → NETLIFY_AUTH_TOKEN=...  (NETLIFY_SITE_ID optional)
+  ddev restart
+  ```
+
+DDEV loads `.ddev/.env.web` into the web container, where `netlify deploy` picks
+the token up. **Never put the token in `config.local.yaml`** (its
+`web_environment` is committed) or anywhere tracked.
+
+Don't want secrets in the container at all? Skip `--deploy` and deploy the export
+from the **host**, where `netlify login` already stored credentials:
+
+```bash
+netlify deploy --prod --dir=html
+```
 
 `dq:static` will:
 

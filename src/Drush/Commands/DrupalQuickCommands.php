@@ -617,7 +617,7 @@ class DrupalQuickCommands extends DrushCommands {
     passthru("{$cli} deploy --prod --dir=html", $code);
 
     if ($code !== 0) {
-      $this->logger()->error('Netlify deploy failed. Ensure the CLI is authenticated (run `netlify login`, or set NETLIFY_AUTH_TOKEN) and the site is linked (netlify.toml / `netlify link` / NETLIFY_SITE_ID). You can also deploy manually: `netlify deploy --prod --dir=html`.');
+      $this->logger()->error('Netlify deploy failed. The CLI must be authenticated inside the container: copy .ddev/.env.web.example to .ddev/.env.web, set NETLIFY_AUTH_TOKEN (and optionally NETLIFY_SITE_ID), then run `ddev restart` and retry. Prefer to keep secrets out of the container? Deploy from the host instead, where `netlify login` stored credentials: `netlify deploy --prod --dir=html`.');
       return $code;
     }
 
