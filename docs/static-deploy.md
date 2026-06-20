@@ -138,6 +138,45 @@ Tome remains the best fit for full-site, framework-free HTML output.
 
 ---
 
+## Deploy target design (when target #2 arrives)
+
+Today `deployStatic()` handles one automated target (Netlify). Don't
+pre-abstract for one target — but it would balloon if more were added as
+inline branches, so here is the intended progression:
+
+1. **At target #2:** turn `deployStatic()` into a thin dispatcher and give each
+   target its own small method, so each one's quirks (auth checks, flags) stay
+   isolated:
+
+   ```php
+   private function deployStatic(string $target): int {
+     return match ($target) {
+       'netlify' => $this->deployNetlify(),
+       'vercel'  => $this->deployVercel(),
+       'github'  => 0, // deploys via git push; no-op here
+       default   => $this->warnUnsupported($target),
+     };
+   }
+   ```
+
+   `deployStatic()` stays ~6 lines regardless of target count.
+
+2. **If targets trend homogeneous** (most static hosts are "run a CLI against the
+   output dir": `netlify`, `vercel`, `surge`, `wrangler pages`, `aws s3 sync`,
+   `firebase`), promote to a data-driven `deploy-targets` map — the same pattern
+   as `recipe-registry.json` — so a new target is data, not code. Keep a method
+   escape hatch for non-CLI targets: GitHub Pages deploys via git push, not a
+   one-line command.
+
+3. **Only for external contributions:** a `StaticDeployerInterface` with one
+   class per target and discovery. This is the textbook answer but overkill now,
+   and it fights the runtime context — `dq:static` runs in a Drush command with
+   an unreliable container, so heavy DI/plugin discovery is awkward. Reserve it
+   for when packages must contribute their own deployers (see
+   [extensibility.md](extensibility.md)).
+
+---
+
 ## Suggested phasing
 
 1. **Now:** `config.dq.yml` `static:` block + `dq:static` command (this
