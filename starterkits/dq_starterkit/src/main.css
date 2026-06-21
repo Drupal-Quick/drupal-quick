@@ -15,3 +15,25 @@
   --font-sans: ui-sans-serif, system-ui, sans-serif;
 }
 /* dq:theme:end */
+
+/* Cross-document view transitions: a slight crossfade between page navigations.
+ * Pairs with the Speculation Rules prerendering in html.html.twig. Chromium-only
+ * for now; other browsers just navigate normally. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: ease;
+}
+
+/* Honour users who prefer reduced motion — no transition for them. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
