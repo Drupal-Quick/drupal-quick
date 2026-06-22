@@ -126,10 +126,12 @@ function _STARTERKIT_article_jsonld($node, array $keywords): array {
     $data['image'] = [$imageUrl];
   }
 
-  // Description from the body summary (or a trimmed, tag-stripped body).
+  // Description from the body summary (or a trimmed, tag-stripped body). Drop
+  // <pre> code blocks first so example markup never leaks into the summary.
   if ($node->hasField('body') && !$node->get('body')->isEmpty()) {
     $body = $node->get('body')->first();
-    $plain = trim(strip_tags($body->summary ?: $body->value));
+    $source = preg_replace('#<pre\b[^>]*>.*?</pre>#is', ' ', $body->summary ?: $body->value);
+    $plain = trim(strip_tags($source));
     if ($plain !== '') {
       $data['description'] = Unicode::truncate($plain, 300, TRUE, TRUE);
     }
