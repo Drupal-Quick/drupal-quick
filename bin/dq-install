@@ -41,6 +41,22 @@ require_once $autoload;
 
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
+use Symfony\Component\Process\Process;
+
+/**
+ * Runs an external command via Symfony Process, streaming its output.
+ *
+ * Array arguments mean no shell is invoked, so package names and paths cannot
+ * be interpreted as shell syntax (no injection, no quoting to get wrong).
+ * Returns the exit code.
+ */
+function run_command(array $command, string $cwd): int {
+    $process = new Process($command, $cwd, null, null, null);
+    $process->run(function (string $type, string $buffer): void {
+        echo $buffer;
+    });
+    return $process->getExitCode() ?? 1;
+}
 
 // ------------------------------------------------------------------ Config
 
@@ -99,7 +115,7 @@ if (!in_array($peerPackage, $rootRequire, true)) {
         $composerFile,
         json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
     );
-    passthru("composer require {$peerPackage}", $exitCode);
+    $exitCode = run_command(['composer', 'require', $peerPackage], $projectRoot);
     if ($exitCode !== 0) {
         echo "❌ Failed to install {$peerPackage}. Recipes with Composer dependencies may not unpack correctly.\n";
     }
@@ -176,7 +192,7 @@ if (empty($toRequire)) {
 
 foreach ($toRequire as $package) {
     echo "\n📦 Installing {$package}...\n";
-    passthru("composer require {$package}", $exitCode);
+    $exitCode = run_command(['composer', 'require', $package], $projectRoot);
     if ($exitCode !== 0) {
         echo "❌ `composer require {$package}` failed.\n";
         exit($exitCode);

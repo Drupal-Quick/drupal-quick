@@ -1,7 +1,10 @@
 site:
   name: "My Tailored Drupal Site"
   admin_user: "admin"
-  admin_pass: "admin_secret_pass"
+  # Leave admin_pass unset to have a strong password generated and shown once
+  # during `drush dq:scaffold`. Set it explicitly only if you must — it then
+  # lives here in plaintext until `dq:cleanup` redacts it on archive.
+  # admin_pass: "change-me"
 
 theme:
   machine_name: "my_custom_theme"

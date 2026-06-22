@@ -111,7 +111,7 @@ echo str_repeat('─', 40) . "\n\n";
 echo "--- Site ---\n";
 $siteName  = ask('Site name', 'My Drupal Site');
 $adminUser = ask('Admin username', 'admin');
-$adminPass = ask('Admin password', 'admin');
+$adminPass = ask('Admin password (leave blank to auto-generate a strong one at scaffold time)', '');
 
 // Theme
 echo "\n--- Theme ---\n";
@@ -163,12 +163,16 @@ if (!empty($registry)) {
 
 $recipesBlock = implode("\n", $recipeLines);
 
+// Only write admin_pass when the user supplied one — otherwise leave it out so
+// dq:scaffold generates a strong password and shows it once, keeping a secret
+// off disk by default.
+$adminPassLine = $adminPass !== '' ? "\n  admin_pass: \"{$adminPass}\"" : '';
+
 // Write config
 $yaml = <<<YAML
 site:
   name: "{$siteName}"
-  admin_user: "{$adminUser}"
-  admin_pass: "{$adminPass}"
+  admin_user: "{$adminUser}"{$adminPassLine}
 
 theme:
   machine_name: "{$themeMachine}"
