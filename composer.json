@@ -19,12 +19,5 @@
         "psr-4": {
             "DrupalQuick\\": "src/"
         }
-    },
-    "extra": {
-        "drush": {
-            "services": {
-                "drush.services.yml": "^12.5 || ^13"
-            }
-        }
     }
 }

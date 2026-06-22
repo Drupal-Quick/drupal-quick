@@ -1,5 +1,0 @@
-services:
-  drupalquick.commands:
-    class: \DrupalQuick\Drush\Commands\DrupalQuickCommands
-    tags:
-      - { name: drush.command }
