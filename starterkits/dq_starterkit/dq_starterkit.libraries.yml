@@ -4,7 +4,7 @@ global:
     theme:
       dist/main.css: {}
   js:
-    dist/main.js: { type: module, minified: true }
+    dist/main.js: { attributes: { type: module }, minified: true }
   dependencies:
     - core/drupal
     - core/once
