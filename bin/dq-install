@@ -10,15 +10,10 @@
  *   3. drush dq:scaffold        — installs Drupal and builds the site
  *
  * Reads config.dq.yml and resolves each recipe against the registry
- * (templates/recipe-registry.json). Registry entries come in two kinds:
- *
- *   bundled  — The recipe ships inside this package (e.g. recipes/blog/).
- *              No Composer action needed; dq:scaffold resolves the path
- *              directly from the vendor directory at runtime.
- *
- *   external — The recipe is a standalone Composer package on GitHub.
- *              This script registers its VCS repository in the project's
- *              composer.json and runs `composer require` to install it.
+ * (templates/recipe-registry.json). Registry recipes are standalone Composer
+ * packages: this script registers each one's VCS repository (unless a local
+ * path repo already provides it) and runs `composer require`, after which
+ * core-recipe-unpack places the recipe under the project's recipes/ directory.
  *
  * Core and contrib recipe paths (e.g. "core/recipes/standard") are not in
  * the registry and require no Composer action — they ship with Drupal core.
@@ -80,8 +75,8 @@ if (empty($recipes)) {
 
 // ------------------------------------------------------------------ Registry
 // The registry maps short recipe keys to their package metadata. Each entry
-// declares: package name, VCS url, install path, whether it is bundled inside
-// drupal-quick, and whether it ships theme-assets. Entries absent from the
+// declares: package name, VCS url, the unpacked install path, and whether it
+// ships theme-assets. Entries absent from the
 // registry are treated as literal paths (e.g. core/recipes/standard) and need
 // no Composer action here — dq:scaffold passes them directly to drush recipe.
 
