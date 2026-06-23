@@ -129,44 +129,34 @@ $toRequire = [];
 
 foreach ($recipes as $recipe) {
     if (!isset($registry[$recipe])) {
-        // Not a drupalquick-managed recipe — no action needed here.
+        // Core/contrib recipe (e.g. core/recipes/standard) — applied directly
+        // by dq:scaffold; no Composer action here.
         continue;
     }
 
-    $info = $registry[$recipe];
-
-    // Bundled recipes ship inside this package at recipes/{name}/ and are
-    // resolved to an absolute vendor path by dq:scaffold at runtime. No
-    // Composer action is needed here.
-    //
-    // TODO (long-term): When a bundled recipe is extracted into its own package
-    // (e.g. drupal-quick/recipe-blog at https://github.com/Drupal-Quick/recipe-blog),
-    // remove "bundled": true from its registry entry and set "url" to the real
-    // GitHub URL. This block will then be skipped and the recipe will be installed
-    // as an external package via the VCS + require logic below.
-    if (!empty($info['bundled'])) {
-        echo "ℹ️  '{$recipe}' is bundled with drupal-quick — skipping install.\n";
-        continue;
-    }
-
+    $info    = $registry[$recipe];
     $package = $info['package'];
-    $url     = $info['url'];
+    $url     = $info['url'] ?? '';
+    $short   = substr($package, strpos($package, '/') + 1);
 
-    // Add VCS repository entry if it is not already present.
-    $repos   = $composer['repositories'] ?? [];
-    $exists  = false;
+    // Register the package's VCS repository unless one already provides it — by
+    // matching url, or a local path repo whose directory is named for the
+    // package (used during local development before the package is published).
+    $repos    = $composer['repositories'] ?? [];
+    $provided = false;
     foreach ($repos as $repo) {
-        if (($repo['url'] ?? '') === $url) {
-            $exists = true;
+        $repoUrl = $repo['url'] ?? '';
+        if (($url !== '' && $repoUrl === $url) || basename(rtrim($repoUrl, '/')) === $short) {
+            $provided = true;
             break;
         }
     }
 
-    if (!$exists) {
+    if ($provided) {
+        echo "ℹ️  Repository for {$package} already configured.\n";
+    } elseif ($url !== '') {
         $composer['repositories'][] = ['type' => 'vcs', 'url' => $url];
         echo "📎 Registered VCS repository for {$package}\n";
-    } else {
-        echo "ℹ️  Repository for {$package} already registered.\n";
     }
 
     $toRequire[] = $package;

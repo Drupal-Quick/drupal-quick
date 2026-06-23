@@ -143,21 +143,21 @@ final class ScaffoldCommand extends Command {
       $this->io->writeln('   Save it now — drupalquick does not store it anywhere.');
     }
 
-    // 2. Generate the theme from the starterkit via Drupal core's generate-theme.
-    // The starterkit ships inside this package (installed outside the web root),
-    // so it is staged into themes/ just long enough for theme discovery to find
-    // it, then removed.
+    // 2. Generate the theme from the starterkit. dq_starterkit is installed as a
+    // drupal-theme package at themes/contrib/dq_starterkit, so Drupal discovers
+    // it natively and generate-theme can point straight at it — no staging.
     if ($themeName) {
       $this->io->writeln("🎨 Generating theme '{$themeName}' from starterkit...");
 
-      $starterkitId     = 'dq_starterkit';
-      $starterkitSource = dirname(__DIR__, 3) . '/starterkits/' . $starterkitId;
-      $drupalRoot       = $this->drupalRoot();
-      $themeDir         = "{$drupalRoot}/themes/custom/{$themeName}";
+      $starterkitId  = 'dq_starterkit';
+      $drupalRoot    = $this->drupalRoot();
+      $themeDir      = "{$drupalRoot}/themes/custom/{$themeName}";
+      $starterkitDir = "{$drupalRoot}/themes/contrib/{$starterkitId}";
 
-      $stagedStarterkit = "{$drupalRoot}/themes/{$starterkitId}";
-      $this->removeDirectory($stagedStarterkit);
-      $this->copyDirectory($starterkitSource, $stagedStarterkit);
+      if (!is_dir($starterkitDir)) {
+        $this->io->error("Starterkit theme not found at themes/contrib/{$starterkitId}. Require it with: composer require drupal-quick/dq_starterkit");
+        return self::FAILURE;
+      }
 
       $genCode = $this->runProcess([
         'php', "{$drupalRoot}/core/scripts/drupal", 'generate-theme',
@@ -167,9 +167,6 @@ final class ScaffoldCommand extends Command {
         '--path=themes/custom',
         "--starterkit={$starterkitId}",
       ]);
-
-      // Remove the staged starterkit whether generation succeeded or not.
-      $this->removeDirectory($stagedStarterkit);
 
       if ($genCode !== 0 || !is_dir($themeDir)) {
         $this->io->error("Theme generation failed (generate-theme exit code {$genCode}).");
@@ -195,7 +192,7 @@ final class ScaffoldCommand extends Command {
       $mainCss = "{$themeDir}/src/main.css";
       $tokens  = $this->parseThemeTokens(file_get_contents($mainCss));
 
-      $skinSrc = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
+      $skinSrc = "{$starterkitDir}/skins/{$themeStyle}.css";
       if (file_exists($skinSrc)) {
         $tokens = array_merge($tokens, $this->parseThemeTokens(file_get_contents($skinSrc)));
       }
@@ -308,7 +305,10 @@ final class ScaffoldCommand extends Command {
     if (!empty($info['bundled'])) {
       return dirname(__DIR__, 3) . '/' . $info['path'];
     }
-    return $info['path'];
+    // External recipe: core-recipe-unpack places it at the project root under
+    // recipes/<package-short-name> (registry 'path'). getcwd() is the project
+    // root (where config.dq.yml lives).
+    return getcwd() . '/' . $info['path'];
   }
 
   /**
