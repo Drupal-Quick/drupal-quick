@@ -7,7 +7,7 @@
         "php": ">=8.1",
         "symfony/yaml": "^6.0 || ^7.0",
         "drush/drush": "^12.5 || ^13",
-        "drupal-quick/dq_starterkit": "*"
+        "drupal-quick/dq_starterkit": "dev-main"
     },
     "suggest": {
         "drupal/core-recipe-unpack": "Required in the consumer project for recipe Composer dependencies to be unpacked into the project's own composer.json."
