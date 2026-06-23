@@ -9,7 +9,7 @@ site:
 theme:
   machine_name: "my_custom_theme"
   title: "My Custom Theme"
-  # Matches a filename in starterkits/skins/ (without .css).
+  # A skin shipped by the dq_starterkit package (see its extra.dq.skins).
   # Available out of the box: minimal, corporate
   style: "minimal"
   # Set to false to skip `npm install && npm run build` after theme generation.

@@ -11,7 +11,11 @@ A Composer package that scaffolds a new Drupal site from a single config file. R
 After creating your Drupal project (`composer create-project drupal/recommended-project my-site`), the build is three commands driven by `config.dq.yml`:
 
 ```bash
-composer require drupal-quick/drupal-quick drush/drush
+# Until tagged releases are on Packagist, register the package repos + allow dev:
+composer config minimum-stability dev && composer config prefer-stable true
+composer config repositories.drupal-quick vcs https://github.com/Drupal-Quick/drupal-quick
+composer config repositories.dq_starterkit vcs https://github.com/Drupal-Quick/dq-starterkit
+composer require "drupal-quick/drupal-quick:dev-main" drush/drush
 
 composer exec dq-init        # write config.dq.yml (--interactive for a wizard)
 # edit config.dq.yml
@@ -36,8 +40,10 @@ ddev config --project-type=drupal --docroot=web --nodejs-version=20
 ddev start
 ddev composer create-project drupal/recommended-project .
 
-# Until a tagged release lands on Packagist, register the repo and require dev-main:
+# Until tagged releases are on Packagist, register the package repos + allow dev:
+ddev composer config minimum-stability dev && ddev composer config prefer-stable true
 ddev composer config repositories.drupal-quick vcs https://github.com/Drupal-Quick/drupal-quick
+ddev composer config repositories.dq_starterkit vcs https://github.com/Drupal-Quick/dq-starterkit
 ddev composer require "drupal-quick/drupal-quick:dev-main"
 
 ddev composer exec -- dq-init     # add --interactive and/or --ddev after `--`

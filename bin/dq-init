@@ -118,31 +118,34 @@ echo "\n--- Theme ---\n";
 $themeMachine = ask('Theme machine name (lowercase, underscores)', 'my_theme');
 $themeTitle   = ask('Theme display name', 'My Theme');
 
-$skinsDir = $packageRoot . '/starterkits/skins';
-$skins    = ['minimal', 'corporate'];
-if (is_dir($skinsDir)) {
-    $found = [];
-    foreach (scandir($skinsDir) as $file) {
+// Discover skins from the installed starterkit package: its composer.json
+// extra.dq.skins metadata, falling back to scanning its skins/ directory. The
+// starterkit ships as drupal-quick/dq_starterkit, installed at
+// web/themes/contrib/dq_starterkit.
+$starterkitDir = $projectRoot . '/web/themes/contrib/dq_starterkit';
+$skins = [];
+if (file_exists($starterkitDir . '/composer.json')) {
+    $meta  = json_decode(file_get_contents($starterkitDir . '/composer.json'), true) ?: [];
+    $skins = $meta['extra']['dq']['skins'] ?? [];
+}
+if (empty($skins) && is_dir($starterkitDir . '/skins')) {
+    foreach (scandir($starterkitDir . '/skins') as $file) {
         if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
-            $found[] = pathinfo($file, PATHINFO_FILENAME);
+            $skins[] = pathinfo($file, PATHINFO_FILENAME);
         }
     }
-    if (!empty($found)) {
-        $skins = $found;
-    }
+}
+if (empty($skins)) {
+    $skins = ['minimal', 'corporate'];
 }
 $themeSkin = choose('Design skin', $skins, 'minimal');
-// TODO (long-term): Once dq_starterkit ships as its own drupal-theme Composer
-// package, read available skins from the installed package metadata rather than
-// from this package's starterkits/skins/ directory.
 
 // Recipes
 // core/recipes/standard is always seeded as the base recipe — it installs the
 // standard content types and config that other recipes depend on. Additional
 // recipes are sourced from the registry (templates/recipe-registry.json), which
-// lists both bundled recipes (shipped inside this package) and future external
-// packages. Core/* and contrib/* paths can be added manually to config.dq.yml
-// after generation if needed.
+// lists standalone recipe packages. Core/* and contrib/* paths can be added
+// manually to config.dq.yml after generation if needed.
 $registryFile = $packageRoot . '/templates/recipe-registry.json';
 $registry     = file_exists($registryFile)
     ? json_decode(file_get_contents($registryFile), true)

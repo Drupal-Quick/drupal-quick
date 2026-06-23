@@ -16,8 +16,8 @@ use Symfony\Component\Console\Output\OutputInterface;
  * dq:scaffold — builds a Drupal site from config.dq.yml.
  *
  *   1. Installs Drupal with the minimal profile.
- *   2. Generates a custom theme from the bundled starterkit, applying the
- *      chosen skin and theme_design tokens.
+ *   2. Generates a custom theme from the dq_starterkit theme package, applying
+ *      the chosen skin and theme_design tokens.
  *   3. Applies each recipe in order, injecting recipe theme assets.
  *   4. Runs post-recipe config overrides.
  *   5. Compiles theme assets via npm/Vite.
@@ -72,18 +72,23 @@ final class ScaffoldCommand extends Command {
         $config['site']['name'] ?? 'Drupal Site'
       );
 
-      $skinsDir       = dirname(__DIR__, 3) . '/starterkits/skins';
-      $availableSkins = ['minimal', 'corporate'];
-      if (is_dir($skinsDir)) {
-        $discovered = [];
-        foreach (scandir($skinsDir) as $file) {
+      // Discover skins from the installed starterkit package (extra.dq.skins),
+      // falling back to scanning its skins/ directory.
+      $starterkitDir  = $this->drupalRoot() . '/themes/contrib/dq_starterkit';
+      $availableSkins = [];
+      if (file_exists("{$starterkitDir}/composer.json")) {
+        $meta = json_decode(file_get_contents("{$starterkitDir}/composer.json"), TRUE) ?: [];
+        $availableSkins = $meta['extra']['dq']['skins'] ?? [];
+      }
+      if (!$availableSkins && is_dir("{$starterkitDir}/skins")) {
+        foreach (scandir("{$starterkitDir}/skins") as $file) {
           if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
-            $discovered[] = pathinfo($file, PATHINFO_FILENAME);
+            $availableSkins[] = pathinfo($file, PATHINFO_FILENAME);
           }
         }
-        if ($discovered) {
-          $availableSkins = array_values($discovered);
-        }
+      }
+      if (!$availableSkins) {
+        $availableSkins = ['minimal', 'corporate'];
       }
 
       $config['theme']['style'] = $this->io->choice(
@@ -143,21 +148,21 @@ final class ScaffoldCommand extends Command {
       $this->io->writeln('   Save it now — drupalquick does not store it anywhere.');
     }
 
-    // 2. Generate the theme from the starterkit via Drupal core's generate-theme.
-    // The starterkit ships inside this package (installed outside the web root),
-    // so it is staged into themes/ just long enough for theme discovery to find
-    // it, then removed.
+    // 2. Generate the theme from the starterkit. dq_starterkit is installed as a
+    // drupal-theme package at themes/contrib/dq_starterkit, so Drupal discovers
+    // it natively and generate-theme can point straight at it — no staging.
     if ($themeName) {
       $this->io->writeln("🎨 Generating theme '{$themeName}' from starterkit...");
 
-      $starterkitId     = 'dq_starterkit';
-      $starterkitSource = dirname(__DIR__, 3) . '/starterkits/' . $starterkitId;
-      $drupalRoot       = $this->drupalRoot();
-      $themeDir         = "{$drupalRoot}/themes/custom/{$themeName}";
+      $starterkitId  = 'dq_starterkit';
+      $drupalRoot    = $this->drupalRoot();
+      $themeDir      = "{$drupalRoot}/themes/custom/{$themeName}";
+      $starterkitDir = "{$drupalRoot}/themes/contrib/{$starterkitId}";
 
-      $stagedStarterkit = "{$drupalRoot}/themes/{$starterkitId}";
-      $this->removeDirectory($stagedStarterkit);
-      $this->copyDirectory($starterkitSource, $stagedStarterkit);
+      if (!is_dir($starterkitDir)) {
+        $this->io->error("Starterkit theme not found at themes/contrib/{$starterkitId}. Require it with: composer require drupal-quick/dq_starterkit");
+        return self::FAILURE;
+      }
 
       $genCode = $this->runProcess([
         'php', "{$drupalRoot}/core/scripts/drupal", 'generate-theme',
@@ -167,9 +172,6 @@ final class ScaffoldCommand extends Command {
         '--path=themes/custom',
         "--starterkit={$starterkitId}",
       ]);
-
-      // Remove the staged starterkit whether generation succeeded or not.
-      $this->removeDirectory($stagedStarterkit);
 
       if ($genCode !== 0 || !is_dir($themeDir)) {
         $this->io->error("Theme generation failed (generate-theme exit code {$genCode}).");
@@ -195,7 +197,7 @@ final class ScaffoldCommand extends Command {
       $mainCss = "{$themeDir}/src/main.css";
       $tokens  = $this->parseThemeTokens(file_get_contents($mainCss));
 
-      $skinSrc = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
+      $skinSrc = "{$starterkitDir}/skins/{$themeStyle}.css";
       if (file_exists($skinSrc)) {
         $tokens = array_merge($tokens, $this->parseThemeTokens(file_get_contents($skinSrc)));
       }
@@ -297,18 +299,16 @@ final class ScaffoldCommand extends Command {
   /**
    * Resolves a recipe key to the path drush recipe expects.
    *
-   * Bundled registry entries resolve to an absolute path inside the package;
-   * non-registry entries (core/*, contrib/*) pass through unchanged.
+   * Registry recipes resolve to the project-root path where core-recipe-unpack
+   * placed the package (recipes/<package-short-name>); non-registry entries
+   * (core/*, contrib/*) pass through unchanged.
    */
   private function resolvePath(string $recipe, array $registry): string {
     if (!isset($registry[$recipe])) {
       return $recipe;
     }
-    $info = $registry[$recipe];
-    if (!empty($info['bundled'])) {
-      return dirname(__DIR__, 3) . '/' . $info['path'];
-    }
-    return $info['path'];
+    // getcwd() is the project root (where config.dq.yml lives).
+    return getcwd() . '/' . $registry[$recipe]['path'];
   }
 
   /**

@@ -3,8 +3,14 @@
         "label": "Blog — Keywords taxonomy + entity reference field on Article",
         "package": "drupal-quick/recipe-blog",
         "url": "https://github.com/Drupal-Quick/recipe-blog",
-        "path": "recipes/blog",
-        "bundled": true,
+        "path": "recipes/recipe-blog",
+        "theme_assets": true
+    },
+    "project": {
+        "label": "Project — content type (page + link + thumbnail) and a projects grid view",
+        "package": "drupal-quick/recipe-project",
+        "url": "https://github.com/Drupal-Quick/recipe-project",
+        "path": "recipes/recipe-project",
         "theme_assets": true
     }
 }
