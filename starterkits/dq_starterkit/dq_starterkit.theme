@@ -42,8 +42,21 @@ foreach (glob(__DIR__ . '/includes/*.theme.inc') as $_include) {
  * entries in the same array, called in the order recipes were applied.
  */
 function dq_starterkit_preprocess(array &$variables, string $hook): void {
-  foreach ($GLOBALS['_preprocessors']['dq_starterkit'][$hook] ?? [] as $fn) {
-    $fn($variables, $hook);
+  // Drupal invokes this generic preprocess with the most specific *registered*
+  // theme hook. For some modules that is a suggestion rather than the base —
+  // notably Views, which registers per-view hooks (e.g.
+  // 'views_view__writing__page_1'). Callbacks register under the base hook
+  // ('views_view', 'node', 'page'), so when a suggestion hook (containing '__')
+  // fires, also dispatch the base hook — otherwise those registrations would
+  // silently never run.
+  $hooks = [$hook];
+  if (($pos = strpos($hook, '__')) !== FALSE) {
+    $hooks[] = substr($hook, 0, $pos);
+  }
+  foreach ($hooks as $candidate) {
+    foreach ($GLOBALS['_preprocessors']['dq_starterkit'][$candidate] ?? [] as $fn) {
+      $fn($variables, $hook);
+    }
   }
 }
 
