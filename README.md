@@ -127,6 +127,7 @@ parameters:
 - A chosen design skin baked into the theme as a CSS token layer
 - CSS custom properties from `theme_design` written into the theme
 - Recipe-specific Twig templates and PHP preprocess includes merged into the theme
+- Semantic, module-free [Schema.org JSON-LD](docs/structured-data.md) on content pages (`BlogPosting` for articles, `WebPage` for basic pages), built by hand from each node's fields
 - All recipes applied in declared order against a minimal Drupal install
 
 ---

@@ -6,6 +6,8 @@ use Drupal\Component\Serialization\Json;
 use Drupal\Component\Serialization\Yaml;
 use Drush\Commands\DrushCommands;
 use Drush\Drush;
+use Symfony\Component\Process\ExecutableFinder;
+use Symfony\Component\Process\Process;
 
 /**
  * Drush commands for drupalquick site scaffolding.
@@ -200,6 +202,91 @@ class DrupalQuickCommands extends DrushCommands {
   }
 
   /**
+   * Generates a strong random password for the admin account.
+   *
+   * Used when config.dq.yml sets no admin_pass, so a freshly scaffolded site
+   * never installs with a weak, well-known default credential. URL-safe base64
+   * of random bytes, trimmed to a fixed length.
+   */
+  private function generatePassword(int $length = 20): string {
+    $raw = rtrim(strtr(base64_encode(random_bytes($length)), '+/', '-_'), '=');
+    return substr($raw, 0, $length);
+  }
+
+  /**
+   * Runs an external command and streams its output to the console.
+   *
+   * Uses Symfony Process with array arguments — no shell is invoked, so there
+   * is no quoting/escaping to get wrong and no command-injection surface — and
+   * an optional working directory in place of a `cd … &&` prefix. Returns the
+   * exit code (a process that never started is reported as 1). Timeout is
+   * disabled because Composer/npm builds can run long.
+   */
+  private function runProcess(array $command, ?string $cwd = NULL): int {
+    $process = new Process($command, $cwd, NULL, NULL, NULL);
+    $process->run(function (string $type, string $buffer): void {
+      $this->output()->write($buffer);
+    });
+    return $process->getExitCode() ?? 1;
+  }
+
+  /**
+   * Extracts CSS custom property declarations (--name: value;) from CSS text.
+   *
+   * Used to read theme tokens from the starterkit's main.css and from a skin
+   * file so they can be merged. Returns an ordered map of token => value.
+   */
+  private function parseThemeTokens(string $css): array {
+    $tokens = [];
+    if (preg_match_all('/(--[\w-]+)\s*:\s*([^;]+);/', $css, $matches, PREG_SET_ORDER)) {
+      foreach ($matches as $match) {
+        $tokens[$match[1]] = trim($match[2]);
+      }
+    }
+    return $tokens;
+  }
+
+  /**
+   * Maps a config.dq.yml theme_design key to a Tailwind v4 @theme token name.
+   *
+   *   <name>_color → --color-<name>  (drives bg-/text-/border-<name> utilities)
+   *   font_family  → --font-sans
+   *   anything else → --<kebab-key>
+   */
+  private function designTokenName(string $key): string {
+    if (str_ends_with($key, '_color')) {
+      return '--color-' . str_replace('_', '-', substr($key, 0, -6));
+    }
+    if ($key === 'font_family') {
+      return '--font-sans';
+    }
+    return '--' . str_replace('_', '-', $key);
+  }
+
+  /**
+   * Rewrites the dq:theme block in main.css with the merged token set.
+   *
+   * The tokens go in a `@theme static` block in the entry stylesheet — the only
+   * place Tailwind v4 processes @theme — so they drive utilities and are always
+   * emitted as CSS variables. Replaces the content between the dq:theme markers.
+   */
+  private function writeThemeTokens(string $mainCss, array $tokens): void {
+    $block = "/* dq:theme:start */\n@theme static {\n";
+    foreach ($tokens as $name => $value) {
+      $block .= "  {$name}: {$value};\n";
+    }
+    $block .= "}\n/* dq:theme:end */";
+
+    $css = file_get_contents($mainCss);
+    $css = preg_replace('/\/\* dq:theme:start \*\/.*?\/\* dq:theme:end \*\//s', $block, $css, 1, $count);
+    if (!$count) {
+      // Markers missing (customized main.css) — append the block instead.
+      $css .= "\n" . $block . "\n";
+    }
+    file_put_contents($mainCss, $css);
+  }
+
+  /**
    * Scaffolds a Drupal site using config.dq.yml.
    *
    * @command dq:scaffold
@@ -257,9 +344,37 @@ class DrupalQuickCommands extends DrushCommands {
       $this->output()->writeln("✅ Configuration updated for this session.\n");
     }
 
+    // Run the build phases inside one try/catch: every Drush call below uses
+    // mustRun(), so any failure aborts with a clear "site may be partially
+    // built" message instead of a raw stack trace.
+    try {
+      return $this->runBuild($config, $registry);
+    }
+    catch (\Throwable $e) {
+      $this->logger()->error('Scaffold failed: ' . $e->getMessage());
+      $this->logger()->error('The site may be partially built — review the error above before re-running `drush dq:scaffold`.');
+      return 1;
+    }
+  }
+
+  /**
+   * Runs the build phases: install → theme → recipes → config → assets.
+   *
+   * Extracted from scaffold() so the whole sequence is wrapped in a single
+   * try/catch there. Returns 0 on success, or a non-zero exit code when a step
+   * fails in a way that does not throw (theme generation / asset build).
+   */
+  private function runBuild(array $config, array $registry): int {
     $siteName    = $config['site']['name'] ?? 'Drupal Site';
     $accountName = $config['site']['admin_user'] ?? 'admin';
-    $accountPass = $config['site']['admin_pass'] ?? 'admin';
+    // Secure default: when no admin_pass is configured, generate a strong one
+    // and show it once, rather than installing with a weak, well-known
+    // credential. A password set explicitly in config.dq.yml still wins.
+    $accountPass   = (string) ($config['site']['admin_pass'] ?? '');
+    $generatedPass = ($accountPass === '');
+    if ($generatedPass) {
+      $accountPass = $this->generatePassword();
+    }
     $themeName   = $config['theme']['machine_name'] ?? NULL;
     $themeTitle  = $config['theme']['title'] ?? 'Custom Theme';
     $themeStyle  = $config['theme']['style'] ?? 'minimal';
@@ -280,6 +395,11 @@ class DrupalQuickCommands extends DrushCommands {
       'account-pass' => $accountPass,
       'yes'          => TRUE,
     ])->mustRun();
+
+    if ($generatedPass) {
+      $this->output()->writeln("   🔑 Generated admin password for '{$accountName}': {$accountPass}");
+      $this->output()->writeln('   Save it now — drupalquick does not store it anywhere.');
+    }
 
     // 2. Generate theme from the starterkit using Drupal core's native
     // generate-theme command.
@@ -317,16 +437,14 @@ class DrupalQuickCommands extends DrushCommands {
       // a temp dir, rewrites dq_starterkit → the new machine name in file
       // contents and names, rebuilds the .info.yml (name, version, generator),
       // and writes the finished theme to themes/custom/{machine}.
-      $generate = sprintf(
-        'php %s generate-theme %s --name=%s --description=%s --path=%s --starterkit=%s',
-        escapeshellarg("{$drupalRoot}/core/scripts/drupal"),
-        escapeshellarg($themeName),
-        escapeshellarg($themeTitle),
-        escapeshellarg('A custom Drupal theme built with Tailwind CSS and Vite.'),
-        escapeshellarg('themes/custom'),
-        escapeshellarg($starterkitId)
-      );
-      passthru($generate, $genCode);
+      $genCode = $this->runProcess([
+        'php', "{$drupalRoot}/core/scripts/drupal", 'generate-theme',
+        $themeName,
+        "--name={$themeTitle}",
+        '--description=A custom Drupal theme built with Tailwind CSS and Vite.',
+        '--path=themes/custom',
+        "--starterkit={$starterkitId}",
+      ]);
 
       // Remove the staged starterkit whether generation succeeded or not.
       $this->removeDirectory($stagedStarterkit);
@@ -350,33 +468,28 @@ class DrupalQuickCommands extends DrushCommands {
       // theme (Olivero) and would otherwise clobber this selection.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
 
-      // Bake the chosen skin into the generated theme.
-      $skinSrc  = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
-      $skinDest = "{$themeDir}/src/theme-skin.css";
+      // Build the theme tokens by layering: the starterkit defaults in main.css
+      // ← the chosen skin ← config.dq.yml theme_design. They must end up in the
+      // entry main.css @theme block, because Tailwind v4 only processes @theme
+      // there (not in @import-ed files). resolveThemeTokens() merges them and
+      // writeThemeTokens() rewrites the dq:theme block in main.css.
+      $this->output()->writeln("🖌️  Applying '{$themeStyle}' skin and theme_design tokens...");
+      $mainCss = "{$themeDir}/src/main.css";
+      $tokens  = $this->parseThemeTokens(file_get_contents($mainCss));
+
+      $skinSrc = dirname(__DIR__, 3) . "/starterkits/skins/{$themeStyle}.css";
       if (file_exists($skinSrc)) {
-        $this->output()->writeln("🖌️  Applying '{$themeStyle}' skin tokens...");
-        $dir = dirname($skinDest);
-        if (!is_dir($dir)) {
-          mkdir($dir, 0755, TRUE);
-        }
-        copy($skinSrc, $skinDest);
+        $tokens = array_merge($tokens, $this->parseThemeTokens(file_get_contents($skinSrc)));
       }
       else {
-        $this->logger()->warning("Skin '{$themeStyle}' not found at {$skinSrc}. Skipping skin step.");
+        $this->logger()->warning("Skin '{$themeStyle}' not found at {$skinSrc}. Using starterkit defaults.");
       }
 
-      // Write theme_design parameters as CSS custom properties into the theme's
-      // source so Vite bundles them into dist/main.css (main.css imports
-      // ./theme-design.css). Exposed as var(--primary-color) etc.
-      if (!empty($parameters['theme_design'])) {
-        $this->output()->writeln('🎨 Writing theme_design tokens into the theme build...');
-        $css = "/* Design tokens from config.dq.yml theme_design. */\n:root {\n";
-        foreach ($parameters['theme_design'] as $var => $value) {
-          $css .= '  --' . str_replace('_', '-', $var) . ": {$value};\n";
-        }
-        $css .= "}\n";
-        file_put_contents("{$themeDir}/src/theme-design.css", $css);
+      foreach ($parameters['theme_design'] ?? [] as $key => $value) {
+        $tokens[$this->designTokenName($key)] = $value;
       }
+
+      $this->writeThemeTokens($mainCss, $tokens);
     }
 
     // 3. Apply recipes.
@@ -428,6 +541,10 @@ class DrupalQuickCommands extends DrushCommands {
       foreach ($parameters['recipe_config'] as $configName => $settings) {
         if (is_array($settings)) {
           foreach ($settings as $key => $value) {
+            if (!is_scalar($value)) {
+              $this->logger()->warning("Skipping non-scalar recipe_config value for {$configName}:{$key} — config:set takes scalar values only.");
+              continue;
+            }
             Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', [$configName, $key, $value], ['yes' => TRUE])->mustRun();
           }
         }
@@ -443,7 +560,10 @@ class DrupalQuickCommands extends DrushCommands {
       $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
       $this->output()->writeln("🔨 Building theme assets (npm install && npm run build)...");
 
-      passthru("cd " . escapeshellarg($themeDir) . " && npm install && npm run build", $buildCode);
+      $buildCode = $this->runProcess(['npm', 'install'], $themeDir);
+      if ($buildCode === 0) {
+        $buildCode = $this->runProcess(['npm', 'run', 'build'], $themeDir);
+      }
 
       if ($buildCode !== 0) {
         $this->logger()->error("Theme build failed. Check that npm is available and the theme's package.json is valid.");
@@ -485,6 +605,19 @@ class DrupalQuickCommands extends DrushCommands {
       return $config['static'] ?? [];
     }
     return [];
+  }
+
+  /**
+   * Resolves Tome's static output directory (default 'html').
+   *
+   * Read from $settings['tome_static_directory'] so the export message and the
+   * deploy --dir stay in agreement when a project overrides it in settings.php.
+   */
+  private function staticDirectory($self): string {
+    $process = Drush::drush($self, 'php:eval', ["echo \\Drupal\\Core\\Site\\Settings::get('tome_static_directory', 'html');"]);
+    $process->run();
+    $dir = trim((string) $process->getOutput());
+    return $dir !== '' ? $dir : 'html';
   }
 
   /**
@@ -549,7 +682,7 @@ class DrupalQuickCommands extends DrushCommands {
     $hasTome = trim((string) Drush::drush($self, 'php:eval', ["echo \\Drupal::moduleHandler()->moduleExists('tome_static') ? '1' : '0';"])->mustRun()->getOutput()) === '1';
     if (!$hasTome) {
       $this->output()->writeln('   Installing drupal/tome via Composer...');
-      passthru('composer require drupal/tome', $code);
+      $code = $this->runProcess(['composer', 'require', 'drupal/tome']);
       if ($code !== 0) {
         $this->logger()->error('composer require drupal/tome failed.');
         return 1;
@@ -588,12 +721,13 @@ class DrupalQuickCommands extends DrushCommands {
     // 6. Emit the deploy template for the chosen target.
     $this->emitDeployTemplate($target);
 
+    $dir = $this->staticDirectory($self);
     $this->output()->writeln('✅ [drupalquick] Static export complete.');
-    $this->output()->writeln("   Output: html/ (Tome default; override via \$settings['tome_static_directory'] in settings.php).");
+    $this->output()->writeln("   Output: {$dir}/ (override via \$settings['tome_static_directory'] in settings.php).");
 
     // 7. Optionally deploy the export to the configured target.
     if ($options['deploy']) {
-      return $this->deployStatic($target);
+      return $this->deployStatic($target, $dir);
     }
 
     return 0;
@@ -608,19 +742,22 @@ class DrupalQuickCommands extends DrushCommands {
    * the site linked (via netlify.toml, `netlify link`, or NETLIFY_SITE_ID).
    * GitHub Pages deploys via its own workflow (git push), so it is a no-op here.
    */
-  private function deployStatic(string $target): int {
+  private function deployStatic(string $target, string $dir = 'html'): int {
     if ($target !== 'netlify') {
       $this->logger()->warning("--deploy currently automates the 'netlify' target only. For '{$target}', deploy via its own workflow (e.g. git push for GitHub Pages).");
       return 0;
     }
 
     // Prefer a globally installed CLI; fall back to npx (Node is available in
-    // the build environment for the theme's Vite build).
-    $bin = trim((string) shell_exec('command -v netlify 2>/dev/null'));
-    $cli = $bin !== '' ? 'netlify' : 'npx --yes netlify-cli';
+    // the build environment for the theme's Vite build). ExecutableFinder
+    // locates the binary without invoking a shell.
+    $netlify = (new ExecutableFinder())->find('netlify');
+    $command = $netlify
+      ? [$netlify, 'deploy', '--prod', "--dir={$dir}"]
+      : ['npx', '--yes', 'netlify-cli', 'deploy', '--prod', "--dir={$dir}"];
 
-    $this->output()->writeln("🚀 [drupalquick] Deploying to Netlify ({$cli})...");
-    passthru("{$cli} deploy --prod --dir=html", $code);
+    $this->output()->writeln('🚀 [drupalquick] Deploying to Netlify...');
+    $code = $this->runProcess($command);
 
     if ($code !== 0) {
       $this->logger()->error('Netlify deploy failed. The CLI must be authenticated inside the container: copy .ddev/.env.web.example to .ddev/.env.web, set NETLIFY_AUTH_TOKEN (and optionally NETLIFY_SITE_ID), then run `ddev restart` and retry. Prefer to keep secrets out of the container? Deploy from the host instead, where `netlify login` stored credentials: `netlify deploy --prod --dir=html`.');
@@ -678,7 +815,7 @@ class DrupalQuickCommands extends DrushCommands {
     }
 
     $this->output()->writeln('🧹 Removing drupalquick package via Composer...');
-    passthru('composer remove drupal-quick/drupal-quick', $exitCode);
+    $exitCode = $this->runProcess(['composer', 'remove', 'drupal-quick/drupal-quick']);
 
     if ($exitCode !== 0) {
       $this->logger()->error('Composer remove failed. Run `composer remove drupal-quick/drupal-quick` manually.');
@@ -697,7 +834,9 @@ class DrupalQuickCommands extends DrushCommands {
     $header = "# Archived by drupalquick on " . date('Y-m-d') . " — reference only.\n"
       . "# This is the (commented-out) configuration used to scaffold this site.\n"
       . "# drupalquick has been removed; this file is inert and safe to delete.\n\n";
-    $body = preg_replace('/^/m', '# ', file_get_contents($configFile));
+    // Redact secrets before leaving the file on disk — never archive a password.
+    $contents = preg_replace('/^(\s*admin_pass:\s*).*$/m', '$1"[redacted]"', file_get_contents($configFile));
+    $body     = preg_replace('/^/m', '# ', $contents);
     file_put_contents($configFile, $header . $body);
   }
 

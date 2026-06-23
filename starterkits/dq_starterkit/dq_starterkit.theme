@@ -134,3 +134,121 @@ function dq_starterkit_css_alter(array &$css): void {
 function dq_starterkit_preprocess_page(array &$variables): void {
   $variables['has_sidebar'] = !empty($variables['page']['sidebar']);
 }
+
+/**
+ * Implements hook_preprocess_HOOK() for node templates.
+ *
+ * Attaches a Schema.org WebPage JSON-LD block to the document <head> for
+ * full-page Basic Page renders. Built by hand from the node's own fields — no
+ * Metatag/Schema.org module required, and the output is fully static-export
+ * friendly (Tome).
+ *
+ * Articles get their own richer BlogPosting markup from the blog recipe's
+ * template; this is scoped to the 'page' bundle so the two never overlap.
+ * Pages have no custom node template in the starterkit, so the JSON-LD goes
+ * in the <head> (a canonical location Google accepts) rather than the body.
+ */
+function dq_starterkit_preprocess_node(array &$variables): void {
+  $node = $variables['node'];
+  if ($node->bundle() !== 'page' || ($variables['view_mode'] ?? '') !== 'full') {
+    return;
+  }
+
+  $variables['#attached']['html_head'][] = [
+    dq_starterkit_page_jsonld($node),
+    'schema_webpage',
+  ];
+}
+
+/**
+ * Builds a Schema.org WebPage JSON-LD render element for a Basic Page node.
+ *
+ * Assembled from the node's fields — title, canonical URL, dates, primary
+ * image (Media reference or plain image field), body summary and any keywords.
+ * Returns a `<script type="application/ld+json">` render element suitable for
+ * the html_head attachment in dq_starterkit_preprocess_node().
+ *
+ * @param \Drupal\node\NodeInterface $node
+ *   The Basic Page node being rendered.
+ *
+ * @return array
+ *   A renderable html_tag element.
+ */
+function dq_starterkit_page_jsonld($node): array {
+  $dateFormatter = \Drupal::service('date.formatter');
+  $fileUrlGenerator = \Drupal::service('file_url_generator');
+
+  // ISO 8601 dates in the site timezone (e.g. 2026-06-21T14:05:00-04:00).
+  $data = [
+    '@context' => 'https://schema.org',
+    '@type' => 'WebPage',
+    'name' => $node->label(),
+    'url' => $node->toUrl('canonical', ['absolute' => TRUE])->toString(),
+    'datePublished' => $dateFormatter->format($node->getCreatedTime(), 'custom', 'c'),
+    'dateModified' => $dateFormatter->format($node->getChangedTime(), 'custom', 'c'),
+  ];
+
+  // Anchor the page within the overall site.
+  if ($siteName = \Drupal::config('system.site')->get('name')) {
+    $data['isPartOf'] = [
+      '@type' => 'WebSite',
+      'name' => $siteName,
+      'url' => \Drupal\Core\Url::fromRoute('<front>', [], ['absolute' => TRUE])->toString(),
+    ];
+  }
+
+  // Primary image (absolute URL) — prefer the Media reference, fall back to a
+  // plain image field if one exists on the bundle.
+  $imageUrl = NULL;
+  if ($node->hasField('field_media') && !$node->get('field_media')->isEmpty()) {
+    $media = $node->get('field_media')->entity;
+    if ($media && $media->hasField('field_media_image') && !$media->get('field_media_image')->isEmpty()) {
+      if ($file = $media->get('field_media_image')->entity) {
+        $imageUrl = $fileUrlGenerator->generateAbsoluteString($file->getFileUri());
+      }
+    }
+  }
+  if (!$imageUrl && $node->hasField('field_image') && !$node->get('field_image')->isEmpty()) {
+    if ($file = $node->get('field_image')->entity) {
+      $imageUrl = $fileUrlGenerator->generateAbsoluteString($file->getFileUri());
+    }
+  }
+  if ($imageUrl) {
+    $data['primaryImageOfPage'] = ['@type' => 'ImageObject', 'url' => $imageUrl];
+  }
+
+  // Description from the body summary (or a trimmed, tag-stripped body). Drop
+  // <pre> code blocks first so example markup never leaks into the summary.
+  if ($node->hasField('body') && !$node->get('body')->isEmpty()) {
+    $body = $node->get('body')->first();
+    $source = preg_replace('#<pre\b[^>]*>.*?</pre>#is', ' ', $body->summary ?: $body->value);
+    $plain = trim(strip_tags($source));
+    if ($plain !== '') {
+      $data['description'] = \Drupal\Component\Utility\Unicode::truncate($plain, 300, TRUE, TRUE);
+    }
+  }
+
+  // Keywords, only if a keywords field is present on this bundle.
+  if ($node->hasField('field_keywords') && !$node->get('field_keywords')->isEmpty()) {
+    $keywords = [];
+    foreach ($node->get('field_keywords') as $item) {
+      if ($item->entity) {
+        $keywords[] = $item->entity->label();
+      }
+    }
+    if ($keywords) {
+      $data['keywords'] = $keywords;
+    }
+  }
+
+  // JSON_HEX_TAG escapes < and > so the payload can never break out of the
+  // <script> element; slashes stay literal for clean URLs.
+  $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG);
+
+  return [
+    '#type' => 'html_tag',
+    '#tag' => 'script',
+    '#attributes' => ['type' => 'application/ld+json'],
+    '#value' => \Drupal\Core\Render\Markup::create($json),
+  ];
+}
