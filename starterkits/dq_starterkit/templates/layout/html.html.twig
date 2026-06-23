@@ -59,8 +59,10 @@
     {# --- Speculation Rules: instant same-origin navigation -------------- #}
     {# Chromium prerenders/prefetches eligible links; other browsers ignore it
        (graceful). Static + edge hosting makes prerender cheap and effective.
-       'moderate' fires on hover / pointerdown. Tune the exclusions for
-       downloads, feeds, and anything marked opt-out. #}
+       'eager' prerenders eligible links as soon as the user signals intent
+       (pointer toward a link) — cheap here because the pages are tiny. Drop to
+       'moderate' (hover/pointerdown) if prerender volume becomes a concern.
+       Tune the exclusions for downloads, feeds, and anything marked opt-out. #}
     <script type="speculationrules">
     {
       "prerender": [{
@@ -71,7 +73,7 @@
             { "not": { "selector_matches": "a[rel~=nofollow], [data-no-prerender] a" } }
           ]
         },
-        "eagerness": "moderate"
+        "eagerness": "eager"
       }],
       "prefetch": [{
         "where": { "href_matches": "/*" },
