@@ -113,6 +113,7 @@ PHP 8.1+ · Drupal 10.3+ or 11 · Drush 12.5+ · Node.js/npm (for the theme buil
 ## Roadmap
 
 - **Build out the recipe library** beyond the blog proof of concept.
+- **Self-generating recipe catalog** — let recipe packages self-describe (`composer.json` `extra.dq`) and generate the registry from them rather than hand-maintaining it. Design + rationale in [docs/recipe-registry.md](docs/recipe-registry.md).
 - **Skin discovery** from installed package metadata once the starterkit is separate.
 - **User-extensible starterkits and recipes** without editing `vendor/` — design in [docs/extensibility.md](docs/extensibility.md).
 - **Harden static export** and consider a recipe form — see [docs/static-deploy.md](docs/static-deploy.md).

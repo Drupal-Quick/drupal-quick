@@ -217,12 +217,18 @@ final class ScaffoldCommand extends Command {
       $this->io->writeln('📦 Applying Drupal recipes...');
       foreach ($recipes as $recipe) {
         $path = $this->resolvePath($recipe, $registry);
-        if ($path !== $recipe) {
-          $this->io->writeln("   Resolved '{$recipe}' → {$path}");
+        // Managed recipes (a registry key or inline spec) resolve to a recipes/
+        // path; core/contrib path strings pass through unchanged.
+        $managed = ($path !== $recipe);
+        if ($managed) {
+          $label = is_array($recipe) ? ($recipe['package'] ?? 'recipe') : $recipe;
+          $this->io->writeln("   Resolved '{$label}' → {$path}");
         }
         Drush::drush(Drush::aliasManager()->getSelf(), 'recipe', [$path], ['yes' => TRUE])->mustRun();
 
-        if ($themeName && isset($registry[$recipe]) && !empty($registry[$recipe]['theme_assets'])) {
+        // Inject theme assets when the recipe ships a theme-assets/ directory
+        // (copyThemeAssets no-ops when it doesn't — no registry flag needed).
+        if ($themeName && $managed) {
           $this->copyThemeAssets($path, $themeName);
         }
       }
@@ -297,18 +303,33 @@ final class ScaffoldCommand extends Command {
   }
 
   /**
-   * Resolves a recipe key to the path drush recipe expects.
+   * Resolves a recipe entry to the path `drush recipe` expects.
    *
-   * Registry recipes resolve to the project-root path where core-recipe-unpack
-   * placed the package (recipes/<package-short-name>); non-registry entries
-   * (core/*, contrib/*) pass through unchanged.
+   * Registry keys and inline package specs ({package, url}) resolve to the
+   * project-root path where core-recipe-unpack unpacked the package
+   * (recipes/<package-short-name>); core/contrib path strings pass through.
    */
-  private function resolvePath(string $recipe, array $registry): string {
-    if (!isset($registry[$recipe])) {
+  private function resolvePath($recipe, array $registry): string {
+    $package = $this->recipePackage($recipe, $registry);
+    if ($package === NULL) {
+      // A core/contrib path string (e.g. core/recipes/standard) — unchanged.
       return $recipe;
     }
+    $short = ($pos = strpos($package, '/')) !== FALSE ? substr($package, $pos + 1) : $package;
     // getcwd() is the project root (where config.dq.yml lives).
-    return getcwd() . '/' . $registry[$recipe]['path'];
+    return getcwd() . '/recipes/' . $short;
+  }
+
+  /**
+   * Returns the Composer package name for a recipe entry, or NULL for a
+   * core/contrib path. Accepts a registry key (string) or an inline spec
+   * (['package' => …, 'url' => …]).
+   */
+  private function recipePackage($recipe, array $registry): ?string {
+    if (is_array($recipe)) {
+      return $recipe['package'] ?? NULL;
+    }
+    return $registry[$recipe]['package'] ?? NULL;
   }
 
   /**
