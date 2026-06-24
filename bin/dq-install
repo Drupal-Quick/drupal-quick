@@ -74,9 +74,9 @@ if (empty($recipes)) {
 }
 
 // ------------------------------------------------------------------ Registry
-// The registry maps short recipe keys to their package metadata. Each entry
-// declares: package name, VCS url, the unpacked install path, and whether it
-// ships theme-assets. Entries absent from the
+// The registry maps short recipe keys to their package metadata: package name,
+// VCS url, and a human label. (The unpacked path and whether the recipe ships
+// theme-assets are derived at runtime by dq:scaffold.) Entries absent from the
 // registry are treated as literal paths (e.g. core/recipes/standard) and need
 // no Composer action here — dq:scaffold passes them directly to drush recipe.
 
@@ -123,16 +123,21 @@ if (!in_array($peerPackage, $rootRequire, true)) {
 $toRequire = [];
 
 foreach ($recipes as $recipe) {
-    if (!isset($registry[$recipe])) {
-        // Core/contrib recipe (e.g. core/recipes/standard) — applied directly
-        // by dq:scaffold; no Composer action here.
+    // A recipe entry is a registry key, an inline package spec
+    // ({package, url}), or a core/contrib path string (no Composer action).
+    if (is_array($recipe)) {
+        $package = $recipe['package'] ?? null;
+        $url     = $recipe['url'] ?? '';
+        if (!$package) {
+            continue;
+        }
+    } elseif (isset($registry[$recipe])) {
+        $package = $registry[$recipe]['package'];
+        $url     = $registry[$recipe]['url'] ?? '';
+    } else {
         continue;
     }
-
-    $info    = $registry[$recipe];
-    $package = $info['package'];
-    $url     = $info['url'] ?? '';
-    $short   = substr($package, strpos($package, '/') + 1);
+    $short = ($pos = strpos($package, '/')) !== false ? substr($package, $pos + 1) : $package;
 
     // Register the package's VCS repository unless one already provides it — by
     // matching url, or a local path repo whose directory is named for the
