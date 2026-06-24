@@ -16,11 +16,13 @@ theme:
   # Useful when deferring the build to a CI step or building manually later.
   build: true
 
-# Core and contrib recipes use their normal paths.
-# drupalquick-managed recipes use short keys from the registry
-# (templates/recipe-registry.json). Run `composer exec dq-install`
-# after editing this file — it will fetch any registry-managed recipes
-# before you run `drush dq:scaffold`.
+# Each recipe entry can be:
+#   - a short key from the registry (templates/recipe-registry.json), e.g. "blog"
+#   - a core/contrib path, e.g. "core/recipes/standard"
+#   - an inline package spec for an ad-hoc recipe (no registry edit needed):
+#       - { package: "you/recipe-x", url: "https://github.com/you/recipe-x" }
+# Run `composer exec dq-install` after editing — it fetches any package recipes
+# (registry keys or inline specs) before `drush dq:scaffold`.
 recipes:
   - "core/recipes/standard"
   - "blog"
