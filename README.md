@@ -112,7 +112,6 @@ PHP 8.1+ · Drupal 10.3+ or 11 · Drush 12.5+ · Node.js/npm (for the theme buil
 
 ## Roadmap
 
-- **Separate starterkit and recipe packages** — ship `dq_starterkit` as a `drupal-theme` package and bundled recipes (e.g. `blog`) as standalone packages, dropping the web-root staging step. (`ScaffoldCommand::resolvePath()` needs an absolute-path fix for the first external recipe.)
 - **Build out the recipe library** beyond the blog proof of concept.
 - **Skin discovery** from installed package metadata once the starterkit is separate.
 - **User-extensible starterkits and recipes** without editing `vendor/` — design in [docs/extensibility.md](docs/extensibility.md).
