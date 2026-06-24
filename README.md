@@ -32,7 +32,7 @@ drush dq:cleanup --purge     # delete config.dq.yml instead of archiving
 
 ### With DDEV
 
-Run every command through `ddev` so it executes in the web container (PHP, Composer, Node/npm, and a database all provided):
+Run every command through `ddev` so it executes in the web container (PHP, Composer, Node/npm, and a database all provided). For the full step-by-step walkthrough including static export and deploy, see [docs/workflow.md](docs/workflow.md).
 
 ```bash
 mkdir my-site && cd my-site
