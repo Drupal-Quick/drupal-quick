@@ -8,15 +8,16 @@ allowed-tools: Read, Grep, Glob, Write, Edit
 
 Emit Schema.org JSON-LD **by hand from each node's own fields** — no Metatag or
 SEO module. Keeps the footprint light and survives the Tome static export
-unchanged. Reference implementation: `recipes/blog/theme-assets/includes/blog.theme.inc`
-(article `BlogPosting`) and the starterkit `.theme` (`WebPage` for pages).
-Full rationale in `docs/structured-data.md`.
+unchanged. Reference implementation: the blog recipe's submodule
+`recipe-blog/module/src/Hook/BlogHooks.php` (article `BlogPosting`) and the
+starterkit `.theme` (`WebPage` for pages). Full rationale in
+`docs/structured-data.md`.
 
 ## Rules
 
-1. **Build in PHP, not Twig.** Assemble a render array in a preprocess callback
-   and return an `html_tag` script element. Never hand-build JSON strings in a
-   template.
+1. **Build in PHP, not Twig.** Assemble a render array in a preprocess `#[Hook]`
+   method (recipe submodule) or the starterkit's `.theme` and return an
+   `html_tag` script element. Never hand-build JSON strings in a template.
 2. **Full view only.** Guard on `($variables['view_mode'] ?? '') === 'full'` so
    teasers/listings never emit duplicate blocks.
 3. **One block per page.** Article = `BlogPosting`; basic page = `WebPage`. Scope
