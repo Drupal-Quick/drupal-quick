@@ -93,7 +93,7 @@ static:                  # optional, used by `drush dq:static`
 
 - A custom theme at `web/themes/custom/{machine_name}/`, generated from `dq_starterkit` and built with Vite + Tailwind CSS v4.
 - Your chosen design skin and `theme_design` tokens baked into the theme.
-- Recipe templates and preprocess includes merged into the theme; all recipes applied in order against a minimal install.
+- Recipe templates merged into the theme and recipe behaviour assembled as native OOP-hook submodules; all recipes applied in order against a minimal install.
 - Module-free [Schema.org JSON-LD](docs/structured-data.md) on content pages (`BlogPosting` for articles, `WebPage` for pages), built from each node's own fields.
 
 ---

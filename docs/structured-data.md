@@ -33,7 +33,8 @@ teasers and listing rows never produce duplicate structured data.
 
 ### Article — `BlogPosting`
 
-Built in `recipes/blog/theme-assets/includes/blog.theme.inc` from:
+Built in the blog recipe's submodule `recipe-blog/module/src/Hook/BlogHooks.php`
+(`BlogHooks::articleJsonld()`) from:
 
 - `headline` — node title
 - `datePublished` / `dateModified` — node created/changed, ISO 8601, site timezone
@@ -54,15 +55,15 @@ a body-summary `description`, and any `field_keywords`.
 
 ## How it's wired
 
-The blog recipe registers an Article preprocessor through the starterkit's
-`STARTERKIT_add_preprocessor()` helper. That helper feeds the theme's generic
-`hook_preprocess()`, which Drupal always dispatches under the **base** hook
-`node` (never a suggestion such as `node__article`) — so the callback registers
-under `'node'` and narrows to Article with `$node->bundle() === 'article'`.
+The blog recipe ships a submodule (`dq_blog`) that `dq:scaffold` assembles under
+the umbrella module and the recipe's `install:` enables. Its `BlogHooks` class
+implements `#[Hook('preprocess_node')]` natively (OOP hooks, Drupal 11.3+) and
+narrows to Article with `$node->bundle() === 'article'`. Because the submodule is
+its own extension, its preprocess stacks with the theme's and with other recipes
+— no shared dispatcher is needed.
 
-The page schema lives in the starterkit itself, so it can define a real
-`hook_preprocess_HOOK()` (`dq_starterkit_preprocess_node()`) and scope to the
-`page` bundle directly.
+The page schema lives in the starterkit itself, which defines
+`dq_starterkit_preprocess_node()` and scopes to the `page` bundle directly.
 
 ### Safety
 
@@ -79,10 +80,10 @@ it verbatim.
 
 To cover another field or content type, edit the relevant builder:
 
-- **Article** → `recipes/blog/theme-assets/includes/blog.theme.inc`
-  (`_STARTERKIT_article_jsonld()`).
+- **Article** → `recipe-blog/module/src/Hook/BlogHooks.php`
+  (`BlogHooks::articleJsonld()`).
 - **Page / other bundles** → the starterkit `.theme`
-  (`dq_starterkit_page_jsonld()`, or a new builder dispatched from
+  (`dq_starterkit_page_jsonld()`, or a new builder called from
   `dq_starterkit_preprocess_node()`).
 
 Validate output with Google's

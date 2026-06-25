@@ -49,8 +49,10 @@ ddev drush dq:scaffold
 ```
 
 This installs Drupal, runs `generate-theme` (renaming `dq_starterkit` → your
-theme machine name), injects each recipe's `theme-assets/` with the STARTERKIT
-token replaced, applies recipes in declared order, and builds the theme assets.
+theme machine name), assembles each recipe's `module/` under the umbrella module
+(`modules/custom/dq_hooks/modules/`), applies recipes in declared order (their
+`install:` enables those submodules), injects each recipe's `theme-assets/`
+templates, and builds the theme assets.
 
 ## 5. Verify
 
@@ -79,5 +81,5 @@ ddev drush dq:cleanup --purge           # delete config.dq.yml for zero trace
   `*.libraries.yml` uses `attributes: { type: module }`.
 - Turn off CSS/JS aggregation while iterating on the theme; the Vite dev server
   (`ddev npm run dev`) serves live assets via the `.vite-dev` marker.
-- For the full convention set and the preprocess-dispatch gotcha, read the
-  `dq-conventions` skill first.
+- For the full convention set and how recipe behaviour ships as OOP-hook
+  submodules, read the `dq-conventions` skill first.
