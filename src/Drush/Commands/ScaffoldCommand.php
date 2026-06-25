@@ -212,6 +212,29 @@ final class ScaffoldCommand extends Command {
       $this->writeThemeTokens($mainCss, $tokens);
     }
 
+    // 2.5. Assemble recipe submodules into the umbrella module. Each recipe may
+    // ship a module/ directory carrying its behaviour (preprocess + JSON-LD) as
+    // native OOP #[Hook] methods. Because every submodule is its own extension,
+    // their hook implementations stack with the theme and with each other — no
+    // shared dispatcher is needed. Done before applying recipes so a recipe's
+    // `install:` can enable its own module.
+    if (!empty($recipes)) {
+      $umbrellaDir = $this->ensureUmbrellaModule();
+      $assembled = [];
+      foreach ($recipes as $recipe) {
+        $path = $this->resolvePath($recipe, $registry);
+        if ($path !== $recipe && ($name = $this->assembleRecipeModule($path, $umbrellaDir))) {
+          $assembled[] = $name;
+        }
+      }
+      if ($assembled) {
+        // Rebuild so the newly placed modules are discoverable before the
+        // recipes' install steps enable them.
+        Drush::drush(Drush::aliasManager()->getSelf(), 'cache:rebuild')->mustRun();
+        $this->io->writeln('   Assembled recipe modules: ' . implode(', ', $assembled));
+      }
+    }
+
     // 3. Apply recipes in declared order, injecting theme assets as we go.
     if (!empty($recipes)) {
       $this->io->writeln('📦 Applying Drupal recipes...');
@@ -345,6 +368,63 @@ final class ScaffoldCommand extends Command {
     $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
     $this->copyDirectory($assetsDir, $themeDir, $themeName);
     $this->io->writeln("   Injected theme assets from {$recipePath}");
+  }
+
+  /**
+   * Ensures the umbrella module exists and returns its directory.
+   *
+   * The umbrella is an organisational container (modules/custom/dq_hooks) under
+   * which recipe submodules are assembled. It does not need to be enabled —
+   * Drupal discovers submodules by scanning the filesystem regardless — but it
+   * gives the recipe-contributed modules a single, tidy home.
+   */
+  private function ensureUmbrellaModule(): string {
+    $dir = $this->drupalRoot() . '/modules/custom/dq_hooks';
+    if (!is_dir($dir)) {
+      mkdir($dir, 0755, TRUE);
+    }
+    $info = "{$dir}/dq_hooks.info.yml";
+    if (!file_exists($info)) {
+      file_put_contents($info, implode("\n", [
+        "name: 'DQ Hooks'",
+        'type: module',
+        "description: 'Umbrella for drupal-quick recipe behaviour submodules (native OOP hooks).'",
+        'core_version_requirement: ^11.3',
+        "package: 'DQ'",
+        '',
+      ]));
+    }
+    return $dir;
+  }
+
+  /**
+   * Assembles a recipe's module/ directory into the umbrella as a submodule.
+   *
+   * The submodule's machine name is taken from the *.info.yml inside module/.
+   * No STARTERKIT token substitution is applied — module namespaces are
+   * independent of the generated theme's machine name. Returns the machine name
+   * (so callers can report it), or NULL when the recipe ships no module.
+   */
+  private function assembleRecipeModule(string $recipePath, string $umbrellaDir): ?string {
+    $base      = str_starts_with($recipePath, '/') ? '' : $this->drupalRoot() . '/';
+    $moduleSrc = $base . rtrim($recipePath, '/') . '/module';
+    if (!is_dir($moduleSrc)) {
+      return NULL;
+    }
+
+    $machine = NULL;
+    foreach (glob("{$moduleSrc}/*.info.yml") as $infoFile) {
+      $machine = basename($infoFile, '.info.yml');
+      break;
+    }
+    if (!$machine) {
+      $this->io->warning("Recipe at {$recipePath} has a module/ directory but no *.info.yml; skipping.");
+      return NULL;
+    }
+
+    // Copy without a theme name so no STARTERKIT substitution happens.
+    $this->copyDirectory($moduleSrc, "{$umbrellaDir}/modules/{$machine}");
+    return $machine;
   }
 
   /**
