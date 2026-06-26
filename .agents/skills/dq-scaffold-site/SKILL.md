@@ -29,7 +29,7 @@ Host equivalent: same `composer` commands without the `ddev` prefix.
 ddev composer exec -- dq-init            # add: --interactive --ddev
 ```
 
-Edit `config.dq.yml`: choose the starterkit skin, set `theme_design` tokens,
+Edit `config.dq.yml`: choose the starterkit preset, set `theme_design` tokens,
 and list recipes under `recipes:` (each must exist in
 `templates/recipe-registry.json`).
 

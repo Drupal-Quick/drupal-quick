@@ -1,4 +1,4 @@
-# Recipe registry — design & roadmap
+# Recipe registry — design
 
 How `config.dq.yml`, the recipe packages, and the registry fit together — and
 where the registry is headed. This is a design note, not a spec.
@@ -77,9 +77,9 @@ The registry is no longer hand-edited — it is **regenerated** by
 and it helps to keep them distinct:
 
 - **Metadata (solved by `extra.dq`).** Each recipe package declares its own
-  catalog entry in `composer.json` — exactly as `dq_starterkit` declares its
-  `skins`. The package is the single source of truth for its `key` + `label`;
-  `package` and `url` are derived:
+  catalog entry in its `composer.json` `extra.dq.recipe`. The package is the
+  single source of truth for its `key` + `label`; `package` and `url` are
+  derived:
 
   ```json
   { "type": "drupal-recipe",
@@ -122,16 +122,13 @@ The same goal is better served by **runtime derivation** (no generated artifact
 to go stale — the most robust option, already in place for `path`/`theme_assets`)
 or an **on-demand/CI generator** that runs when recipes actually change.
 
-### TL;DR
+### Status
 
-- **Done:** slim registry to `package`/`url`/`label`, derive `path` +
-  `theme_assets`, allow inline package specs.
-- **Done:** self-describing `extra.dq.recipe` packages + `bin/dq-registry-build`
-  generating the registry cache from a GitHub org and/or local checkouts.
-- **Next:** wire `bin/dq-registry-build` into drupal-quick's CI so the shipped
-  cache refreshes at release time.
-- **Later (optional):** if recipes move to Packagist, the catalog could be
-  queried live at `dq-init` (no committed file) — at the cost of offline
-  determinism. Revisit then; the `url` field becomes vestigial.
-- **Skip:** commit-hook generation, and regenerating from *recipe*-repo triggers
-  (wrong trigger / N→1 coupling; freshness gated on a drupal-quick release).
+Implemented. The registry is slim (`package`/`url`/`label`, with `path` +
+`theme_assets` derived), recipe packages self-describe via `extra.dq.recipe`, and
+`bin/dq-registry-build` regenerates the cache from the GitHub org and/or local
+checkouts — run from drupal-quick's CI
+([`.github/workflows/recipe-registry.yml`](../.github/workflows/recipe-registry.yml))
+or by hand. A fully file-less live query at `dq-init` remains possible only if
+recipes move to Packagist; not pursued, to keep `dq-init`/`dq-install` offline
+and deterministic.

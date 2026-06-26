@@ -45,7 +45,7 @@ ddev composer exec -- dq-init --interactive
 ddev composer exec -- dq-init --ddev
 ```
 
-Edit `config.dq.yml` to set your site name, theme machine name, skin, and recipes.
+Edit `config.dq.yml` to set your site name, theme machine name, preset, and recipes.
 
 A recipe entry can be a registry key, a core/contrib path, or an inline package spec for a one-off recipe with no registry edit:
 
@@ -82,7 +82,7 @@ This single command:
 
 1. Installs Drupal (`drush site:install`)
 2. Generates a real theme from the starterkit (`drupal generate-theme`)
-3. Applies the chosen skin and any `theme_design` token overrides
+3. Applies the chosen design preset (`npm run preset`) and any `theme_design` overrides
 4. Applies each recipe in order (`drush recipe …`), injecting recipe `theme-assets/` into the theme
 5. Runs `npm install && npm run build` in the theme (unless `build: false`)
 6. Applies any `recipe_config` overrides
