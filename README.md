@@ -51,7 +51,7 @@ ddev composer exec -- dq-install
 ddev drush dq:scaffold
 ```
 
-`--nodejs-version=20` gives the container a recent Node for the Vite build; set `theme.build: false` to skip it. Pass `--ddev` to `dq-init` to drop in DDEV deploy-credential templates for `dq:static --deploy`.
+`--nodejs-version=20` gives the container a recent Node for the Vite build; set `theme.build: false` to skip it. Pass `--ddev` to `dq-init` to drop in DDEV deploy-credential templates for `dq:deploy`.
 
 ---
 
@@ -100,7 +100,7 @@ static:                  # optional, used by `drush dq:static`
 
 ## Static export
 
-`drush dq:static` installs [Tome](https://tome.fyi), exports the site to static HTML in `html/`, and writes a deploy config for the chosen `static.target` (Netlify or GitHub Pages). Settings persist to Drupal config so they survive `dq:cleanup`. Add `--deploy` to push to Netlify (needs CLI auth). Full workflow and caveats in [docs/static-deploy.md](docs/static-deploy.md).
+`drush dq:static` installs [Tome](https://tome.fyi) and exports the site to static HTML in `html/`. `drush dq:deploy` then writes the deploy config for the chosen `static.target` (Netlify or GitHub Pages) and publishes it (Netlify automated, needs CLI auth). Settings persist to Drupal config so they survive `dq:cleanup`. Full workflow and caveats in [docs/static-deploy.md](docs/static-deploy.md).
 
 ---
 

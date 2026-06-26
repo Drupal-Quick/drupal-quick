@@ -137,7 +137,8 @@ netlify deploy --prod --dir=html
 cp .ddev/.env.web.example .ddev/.env.web
 # edit .ddev/.env.web: set NETLIFY_AUTH_TOKEN (and optionally NETLIFY_SITE_ID)
 ddev restart
-ddev drush dq:static --deploy   # export + deploy in one step
+ddev drush dq:static            # generate the static export → html/
+ddev drush dq:deploy            # publish it to the configured target
 ```
 
 Never put the token in `.ddev/config.local.yaml` — its `web_environment` is committed to git.

@@ -78,19 +78,23 @@ static:
 ddev drush dq:static
 # or override the base URL ad hoc:
 ddev drush dq:static --base-url=https://example.com
-# export AND push to the configured target in one step:
-ddev drush dq:static --deploy
+# then publish the export to the configured target:
+ddev drush dq:deploy
 ```
 
-`--deploy` runs after the export and pushes to the configured `target`. Only
-Netlify is automated for now: it runs `netlify deploy --prod --dir=html`, using a
+`dq:deploy` is a separate command (so generation and publishing each carry their
+own flags). It reads the `target` from the persisted `drupalquick.static` config
+(seeded by `dq:static`), writes the target's deploy config, and pushes. Only
+Netlify is automated for now: `netlify deploy --prod --dir=html`, using a
 globally installed `netlify` CLI if present, otherwise `npx netlify-cli`. GitHub
-Pages deploys via its own workflow (git push), so `--deploy` is a no-op for that
-target.
+Pages deploys via its own workflow (git push), so for that target `dq:deploy`
+just writes `.github/workflows/deploy-pages.yml`. It is loosely coupled to the
+build: if `html/` is missing it tells you to run `dq:static` first rather than
+regenerating implicitly.
 
 ### Deploy credentials
 
-`--deploy` runs inside the DDEV web container, so the credentials must be present
+`dq:deploy` runs inside the DDEV web container, so the credentials must be present
 there — and they are secrets, so they must stay out of version control. The
 mechanism:
 
@@ -108,7 +112,7 @@ DDEV loads `.ddev/.env.web` into the web container, where `netlify deploy` picks
 the token up. **Never put the token in `config.local.yaml`** (its
 `web_environment` is committed) or anywhere tracked.
 
-Don't want secrets in the container at all? Skip `--deploy` and deploy the export
+Don't want secrets in the container at all? Skip `dq:deploy` and deploy the export
 from the **host**, where `netlify login` already stored credentials:
 
 ```bash
@@ -119,13 +123,17 @@ netlify deploy --prod --dir=html
 
 1. Resolve settings (persisted config, else `config.dq.yml`).
 2. `composer require drupal/tome` and enable `tome_static` if not already present.
-3. Persist `target`/`uri` to `drupalquick.static`.
+3. Persist `target`/`uri` to `drupalquick.static` (so it survives `dq:cleanup`).
 4. Preflight the active theme — abort if the Vite dev marker is present, warn if
    `dist/main.css` is missing.
 5. Run `drush tome:static` (with `--uri` if configured).
-6. Write the deploy config for the target (`netlify.toml` or
+
+`dq:deploy` then:
+
+6. Confirms `html/` exists (else tells you to run `dq:static`).
+7. Writes the deploy config for the target (`netlify.toml` or
    `.github/workflows/deploy-pages.yml`).
-7. With `--deploy`, push the export to the target (Netlify only for now).
+8. Pushes the export to the target (Netlify automated; GitHub via its workflow).
 
 Output lands in `html/` (Tome's default; override with
 `$settings['tome_static_directory']` in `settings.php`).
