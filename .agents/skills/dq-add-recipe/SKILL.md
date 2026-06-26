@@ -92,17 +92,25 @@ variables your submodule sets. `dq:scaffold` replaces the literal token
 `STARTERKIT` with the theme machine name in contents/filenames — only needed if a
 template must name the theme (rare).
 
-## Register in the recipe registry
+## Catalog metadata (self-describing)
 
-Add the recipe to `templates/recipe-registry.json` so `dq-install` can resolve it:
+The recipe declares its own catalog entry in **`composer.json`** — the package is
+the single source of truth for its key and label:
 
 ```json
-{ "blog": { "bundled": true, "path": "recipes/blog" } }
+{
+  "name": "drupal-quick/recipe-blog",
+  "type": "drupal-recipe",
+  "extra": { "dq": { "recipe": { "key": "blog", "label": "Blog — …" } } }
+}
 ```
 
-`bundled: true` ships inside this package. External recipes drop `bundled` and
-add a GitHub URL; `dq-install` registers the VCS repo and `composer require`s it.
-(External path resolution in `resolvePath()` is still a known TODO — see README.)
+Do **not** hand-edit `templates/recipe-registry.json` — it is a generated cache.
+Run `php bin/dq-registry-build` (or let drupal-quick CI run it) to enumerate the
+recipe packages, read each `extra.dq.recipe`, and regenerate the registry
+(`{ key: { label, package, url } }`; package + url are derived). See
+`docs/recipe-registry.md`. A one-off recipe can still skip the catalog entirely
+by referencing it inline in `config.dq.yml` (`{ package, url }`).
 
 ## Checklist
 
@@ -112,5 +120,6 @@ add a GitHub URL; `dq-install` registers the VCS repo and `composer require`s it
       `#[Hook]` methods register under the base hook with a bundle/view-id guard.
 - [ ] `recipe.yml` `install:` lists the submodule so it gets enabled.
 - [ ] Templates are in `theme-assets/`; any theme-name token uses `STARTERKIT`.
-- [ ] Registered in `templates/recipe-registry.json`.
+- [ ] `composer.json` declares `extra.dq.recipe` (`key` + `label`); regenerate
+      the cache with `php bin/dq-registry-build` (never hand-edit it).
 - [ ] Applying it on a fresh scaffold creates the fields and renders correctly.

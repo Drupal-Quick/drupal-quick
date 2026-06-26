@@ -1,0 +1,217 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * dq-registry-build: regenerate the recipe registry cache.
+ *
+ * The registry (templates/recipe-registry.json) is a *generated cache*, not a
+ * hand-edited catalog. Each recipe package is the single source of truth for its
+ * own catalog metadata, declared in its composer.json:
+ *
+ *   "type": "drupal-recipe",
+ *   "extra": { "dq": { "recipe": { "key": "blog", "label": "Blog — …" } } }
+ *
+ * This script enumerates recipe packages, reads that metadata, and writes the
+ * registry as { key: { label, package, url } }. The package name and repo url
+ * are derived (composer "name" and the repo's URL), so only key + label are
+ * authored, in one place.
+ *
+ * Sources (combined; local paths win on key collision so local checkouts can
+ * override a published recipe during development):
+ *   --path=DIR     a local recipe checkout (repeatable); url from its git origin
+ *   --org=NAME     a GitHub org to enumerate via the API (default: Drupal-Quick;
+ *                  pass --org= to disable)
+ *
+ * It needs no Drupal site and no Composer dependencies, so it runs anywhere —
+ * notably in drupal-quick's own CI, the natural moment to refresh the cache
+ * since the registry ships inside this package.
+ *
+ *   php bin/dq-registry-build                       # enumerate the default org
+ *   php bin/dq-registry-build --path=../recipe-blog --org= --dry-run
+ *
+ * A GitHub token (--token= or GITHUB_TOKEN env) raises the API rate limit and
+ * allows private repos.
+ */
+
+$packageRoot = dirname(__DIR__);
+
+// ------------------------------------------------------------------ Arguments
+
+$opts = [
+  'org'     => 'Drupal-Quick',
+  'paths'   => [],
+  'output'  => $packageRoot . '/templates/recipe-registry.json',
+  'token'   => getenv('GITHUB_TOKEN') ?: '',
+  'dry-run' => false,
+];
+
+foreach (array_slice($argv, 1) as $arg) {
+  if ($arg === '--dry-run') {
+    $opts['dry-run'] = true;
+  }
+  elseif ($arg === '--help' || $arg === '-h') {
+    fwrite(STDOUT, "Usage: dq-registry-build [--org=NAME] [--path=DIR ...] [--output=FILE] [--token=TOKEN] [--dry-run]\n");
+    exit(0);
+  }
+  elseif (str_starts_with($arg, '--path=')) {
+    $opts['paths'][] = substr($arg, 7);
+  }
+  elseif (str_starts_with($arg, '--org=')) {
+    $opts['org'] = substr($arg, 6);
+  }
+  elseif (str_starts_with($arg, '--output=')) {
+    $opts['output'] = substr($arg, 9);
+  }
+  elseif (str_starts_with($arg, '--token=')) {
+    $opts['token'] = substr($arg, 8);
+  }
+  else {
+    fwrite(STDERR, "⚠️  Unknown argument: {$arg}\n");
+  }
+}
+
+// ------------------------------------------------------------------ Helpers
+
+/**
+ * Performs a GET request with the plain stream wrapper (no Guzzle dependency).
+ *
+ * GitHub requires a User-Agent header. Returns [body|null, httpStatus].
+ */
+function http_get(string $url, string $token = ''): array {
+  $headers = [
+    'User-Agent: dq-registry-build',
+    'Accept: application/vnd.github+json',
+  ];
+  if ($token !== '') {
+    $headers[] = "Authorization: Bearer {$token}";
+  }
+  $context = stream_context_create(['http' => [
+    'method'        => 'GET',
+    'header'        => implode("\r\n", $headers),
+    'ignore_errors' => true,
+    'timeout'       => 15,
+  ]]);
+  $body = @file_get_contents($url, false, $context);
+  $status = 0;
+  foreach ($http_response_header ?? [] as $line) {
+    if (preg_match('#^HTTP/\S+\s+(\d+)#', $line, $m)) {
+      $status = (int) $m[1];
+    }
+  }
+  return [$body === false ? null : $body, $status];
+}
+
+/**
+ * Normalises a git remote URL to an https web URL without the .git suffix.
+ */
+function normalize_git_url(string $url): string {
+  $url = trim($url);
+  // git@github.com:Org/repo.git → https://github.com/Org/repo
+  if (preg_match('#^git@([^:]+):(.+?)(?:\.git)?$#', $url, $m)) {
+    return "https://{$m[1]}/{$m[2]}";
+  }
+  return preg_replace('#\.git$#', '', $url);
+}
+
+/**
+ * Builds a registry entry from a decoded composer.json, or NULL if the package
+ * is not a recipe that opts into the catalog.
+ */
+function entry_from_composer(?array $composer, string $url): ?array {
+  if (!$composer || ($composer['type'] ?? '') !== 'drupal-recipe') {
+    return null;
+  }
+  $meta = $composer['extra']['dq']['recipe'] ?? null;
+  if (!is_array($meta) || empty($meta['key'])) {
+    return null;
+  }
+  return [
+    'key'   => (string) $meta['key'],
+    'entry' => [
+      'label'   => (string) ($meta['label'] ?? $meta['key']),
+      'package' => (string) ($composer['name'] ?? ''),
+      'url'     => $url,
+    ],
+  ];
+}
+
+// ------------------------------------------------------------------ Collect
+
+$registry = [];
+
+/**
+ * Adds an entry, warning on a key collision (first writer wins; local paths are
+ * processed before the org, so a local checkout overrides a published recipe).
+ */
+$add = function (?array $built, string $origin) use (&$registry): void {
+  if (!$built) {
+    return;
+  }
+  $key = $built['key'];
+  if (isset($registry[$key])) {
+    fwrite(STDERR, "ℹ️  Key '{$key}' already set; ignoring duplicate from {$origin}.\n");
+    return;
+  }
+  $registry[$key] = $built['entry'];
+  fwrite(STDOUT, "   + {$key} → {$built['entry']['package']}\n");
+};
+
+// 1. Local checkouts.
+foreach ($opts['paths'] as $path) {
+  $composerFile = rtrim($path, '/') . '/composer.json';
+  if (!is_file($composerFile)) {
+    fwrite(STDERR, "⚠️  No composer.json at {$path}; skipping.\n");
+    continue;
+  }
+  $composer = json_decode(file_get_contents($composerFile), true);
+  $remote = @shell_exec('git -C ' . escapeshellarg($path) . ' remote get-url origin 2>/dev/null') ?: '';
+  $add(entry_from_composer($composer, normalize_git_url($remote)), $path);
+}
+
+// 2. GitHub org enumeration.
+if ($opts['org'] !== '') {
+  fwrite(STDOUT, "🔎 Enumerating GitHub org '{$opts['org']}'...\n");
+  $page = 1;
+  do {
+    $apiUrl = "https://api.github.com/orgs/{$opts['org']}/repos?per_page=100&page={$page}";
+    [$body, $status] = http_get($apiUrl, $opts['token']);
+    if ($status !== 200 || $body === null) {
+      fwrite(STDERR, "⚠️  GitHub API returned {$status} for {$apiUrl}. Stopping org scan.\n");
+      break;
+    }
+    $repos = json_decode($body, true) ?: [];
+    foreach ($repos as $repo) {
+      $branch = $repo['default_branch'] ?? 'main';
+      $full   = $repo['full_name'] ?? '';
+      if ($full === '') {
+        continue;
+      }
+      $rawUrl = "https://raw.githubusercontent.com/{$full}/{$branch}/composer.json";
+      [$cBody] = http_get($rawUrl, $opts['token']);
+      if ($cBody === null) {
+        continue;
+      }
+      $composer = json_decode($cBody, true);
+      $add(entry_from_composer($composer, $repo['html_url'] ?? ''), $full);
+    }
+    $page++;
+  } while (count($repos) === 100);
+}
+
+// ------------------------------------------------------------------ Write
+
+ksort($registry);
+$json = json_encode($registry, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+
+if (empty($registry)) {
+  fwrite(STDERR, "⚠️  No recipe packages found. Refusing to overwrite the registry with an empty catalog.\n");
+  exit(1);
+}
+
+if ($opts['dry-run']) {
+  fwrite(STDOUT, "\n--- dry run (would write {$opts['output']}) ---\n{$json}");
+  exit(0);
+}
+
+file_put_contents($opts['output'], $json);
+fwrite(STDOUT, "\n✅ Wrote " . count($registry) . " recipe(s) to {$opts['output']}\n");
