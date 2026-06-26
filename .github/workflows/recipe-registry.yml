@@ -1,0 +1,49 @@
+name: Build recipe registry
+
+# Regenerates the recipe registry cache (templates/recipe-registry.json) from the
+# recipe packages' own extra.dq.recipe metadata. The registry ships inside this
+# package, so this repo's CI is the sustainable place to refresh it — decoupled
+# from the recipe repos (no N->1 trigger coupling). It opens a PR when the
+# registry changes rather than committing to main, keeping a human review gate.
+on:
+  workflow_dispatch:        # run on demand (e.g. before a release)
+  schedule:
+    - cron: '0 6 * * 1'     # weekly, Mondays 06:00 UTC
+
+permissions:
+  contents: write           # create the PR branch
+  pull-requests: write      # open the PR
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      # No Composer install needed — the script is standalone PHP with no deps.
+      # GITHUB_TOKEN raises the API rate limit and reads public org repos. For
+      # private recipe repos, supply a PAT/org token with repo read scope instead.
+      - name: Regenerate recipe registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: php bin/dq-registry-build --org=Drupal-Quick
+
+      # No-ops when the registry is already up to date.
+      - name: Open a PR if the registry changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          add-paths: templates/recipe-registry.json
+          branch: chore/registry-refresh
+          delete-branch: true
+          title: 'Refresh recipe registry'
+          commit-message: 'Refresh recipe registry from package metadata'
+          body: |
+            Regenerated `templates/recipe-registry.json` from the `Drupal-Quick`
+            org's recipe packages (`extra.dq.recipe`) via `bin/dq-registry-build`.
+
+            Automated by `.github/workflows/recipe-registry.yml`.

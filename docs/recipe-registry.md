@@ -60,29 +60,52 @@ inline-spec form lets a one-off recipe skip the registry entirely.
 
 ## Adding a recipe today
 
-1. Publish the recipe as a `type: drupal-recipe` Composer package (mirror
+1. Publish the recipe as a `type: drupal-recipe` Composer package with its
+   catalog metadata in `extra.dq.recipe` (`key`, `label`) — mirror
    [`recipe-blog`](https://github.com/Drupal-Quick/recipe-blog); see the
-   `dq-add-recipe` skill).
-2. Either add `{ key: { package, url, label } }` to the registry (to make it a
-   first-class catalog option), **or** reference it inline in `config.dq.yml`
-   with no registry edit.
+   `dq-add-recipe` skill.
+2. Regenerate the cache: `php bin/dq-registry-build` (or let CI run it). For a
+   one-off you can skip the catalog and reference the recipe inline in
+   `config.dq.yml` (`{ package, url }`) with no registry entry at all.
 
 ---
 
-## Roadmap — toward a self-generating catalog
+## The registry is a generated cache
 
-The remaining manual step is keeping the registry's package list in step with
-the actual recipe repos. The intended evolution:
+The registry is no longer hand-edited — it is **regenerated** by
+`bin/dq-registry-build` from self-describing packages. Two layers make this work,
+and it helps to keep them distinct:
 
-1. **Self-describing packages.** Each recipe package declares its catalog
-   metadata in its own `composer.json` `extra.dq` (`key`, `label`) — exactly as
-   `dq_starterkit` already declares its `skins`. The package becomes the single
-   source of truth.
-2. **A generator, not a hand-edited file.** A `drush dq:registry:build` command
-   (or a CI job) scans the recipe sources — the `Drupal-Quick` GitHub org via
-   the API, or a tiny `sources:` list — reads each repo's `extra.dq`, and
-   regenerates `recipe-registry.json`. Adding a recipe becomes: create the repo
-   with the right metadata; the catalog updates itself.
+- **Metadata (solved by `extra.dq`).** Each recipe package declares its own
+  catalog entry in `composer.json` — exactly as `dq_starterkit` declares its
+  `skins`. The package is the single source of truth for its `key` + `label`;
+  `package` and `url` are derived:
+
+  ```json
+  { "type": "drupal-recipe",
+    "extra": { "dq": { "recipe": { "key": "blog", "label": "Blog — …" } } } }
+  ```
+
+- **Enumeration (still needs a source).** `extra.dq` can only be read *after* a
+  package is fetched, so it cannot, by itself, tell you *which* packages exist
+  before install. Something must enumerate the candidates first. `dq-registry-build`
+  does this two ways (combined; local paths win on key collision):
+  - `--org=Drupal-Quick` — enumerate a GitHub org via the API (the default),
+  - `--path=DIR` — read a local recipe checkout (url from its git origin).
+
+So `recipe-registry.json` is best understood as a **committed cache** of that
+enumeration, keyed off one constant (the org name) — not a catalog to maintain by
+hand. It is committed so `dq-init`/`dq-install` work offline and deterministically.
+
+### When it regenerates
+
+Because the registry **ships inside this package**, users only receive a refresh
+when drupal-quick is released — so the sustainable trigger is **drupal-quick's own
+CI** running `bin/dq-registry-build` at build/release time (the delivery moment),
+with the script as the reusable engine. Regenerating from *recipe* repos instead
+was rejected: it is N→1 cross-repo coupling and the freshness is illusory (still
+gated on a drupal-quick release). The script needs no Drupal site, so the CI step
+is trivial. To refresh by hand: `php bin/dq-registry-build`.
 
 ### Rejected: pre/post-commit hook generation
 
@@ -101,8 +124,14 @@ or an **on-demand/CI generator** that runs when recipes actually change.
 
 ### TL;DR
 
-- **Done (short term):** slim registry to `package`/`url`/`label`, derive
-  `path` + `theme_assets`, allow inline package specs.
-- **Next (medium term):** self-describing `extra.dq` packages + a generator
-  command/CI — if/when zero-touch recipe discovery is worth the tooling.
-- **Skip:** commit-hook generation (wrong trigger, fragile).
+- **Done:** slim registry to `package`/`url`/`label`, derive `path` +
+  `theme_assets`, allow inline package specs.
+- **Done:** self-describing `extra.dq.recipe` packages + `bin/dq-registry-build`
+  generating the registry cache from a GitHub org and/or local checkouts.
+- **Next:** wire `bin/dq-registry-build` into drupal-quick's CI so the shipped
+  cache refreshes at release time.
+- **Later (optional):** if recipes move to Packagist, the catalog could be
+  queried live at `dq-init` (no committed file) — at the cost of offline
+  determinism. Revisit then; the `url` field becomes vestigial.
+- **Skip:** commit-hook generation, and regenerating from *recipe*-repo triggers
+  (wrong trigger / N→1 coupling; freshness gated on a drupal-quick release).
