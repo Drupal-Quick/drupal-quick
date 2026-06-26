@@ -67,10 +67,11 @@ no dispatcher.
 
 - Module namespace = the **module** machine name (`Drupal\dq_blog\Hook`), not the
   theme — so no `STARTERKIT` token in module PHP.
-- Theme `#[Hook]` supports no `order`/`module` param and no Reorder/RemoveHook;
-  recipe modules don't need them (each guards by bundle/view id).
-- The **starterkit** keeps its own presentation hooks procedurally in `.theme`
-  (one impl each, no conflict). Requires Drupal **^11.3** (OOP theme hooks).
+- Recipe modules use **module** OOP preprocess hooks — introduced in Drupal
+  **11.2**, backported to **11.1.8** — so the stack floor is `^11.1.8`.
+- The **starterkit** keeps its own presentation hooks procedural in `.theme`
+  (one impl each, no conflict); it does **not** use OOP theme hooks (those are
+  11.3+, and we don't need them).
 
 ## Theme build (Vite + Tailwind v4)
 

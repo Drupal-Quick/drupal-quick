@@ -79,7 +79,7 @@ final class BlogHooks {
 ```
 
 - The module needs a `dq_<name>.info.yml` (`type: module`,
-  `core_version_requirement: ^11.3`, `dependencies:` for node/views/etc.).
+  `core_version_requirement: ^11.1.8`, `dependencies:` for node/views/etc.).
 - The namespace is the **module** machine name (`Drupal\dq_blog\Hook`) — no
   `STARTERKIT` token; module namespaces are independent of the theme.
 - Multiple recipes may implement the same hook — each submodule is a separate

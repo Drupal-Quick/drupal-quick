@@ -57,7 +57,7 @@ a body-summary `description`, and any `field_keywords`.
 
 The blog recipe ships a submodule (`dq_blog`) that `dq:scaffold` assembles under
 the umbrella module and the recipe's `install:` enables. Its `BlogHooks` class
-implements `#[Hook('preprocess_node')]` natively (OOP hooks, Drupal 11.3+) and
+implements `#[Hook('preprocess_node')]` natively (OOP hooks, Drupal 11.1.8+) and
 narrows to Article with `$node->bundle() === 'article'`. Because the submodule is
 its own extension, its preprocess stacks with the theme's and with other recipes
 — no shared dispatcher is needed.
