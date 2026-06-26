@@ -389,7 +389,7 @@ final class ScaffoldCommand extends Command {
         "name: 'DQ Hooks'",
         'type: module',
         "description: 'Umbrella for drupal-quick recipe behaviour submodules (native OOP hooks).'",
-        'core_version_requirement: ^11.3',
+        'core_version_requirement: ^11.1.8',
         "package: 'DQ'",
         '',
       ]));
