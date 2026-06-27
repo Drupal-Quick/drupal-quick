@@ -46,7 +46,7 @@ Only `description` is required. Keep bodies tight (≤ ~5k tokens), imperative
 | `dq-add-recipe` | Process | ✅ built | Author a new recipe: `recipe.yml` + config + `theme-assets/` following conventions |
 | `dq-structured-data` | Intent | ✅ built | Add/validate module-free Schema.org JSON-LD the dq way (see `docs/structured-data.md`) |
 | `dq-theme-build` | Process | ⬜ proposed | Generate/iterate the theme; Vite + Tailwind v4 build; HMR dev loop |
-| `dq-static-deploy` | Process | ⬜ proposed | `drush dq:static` → Tome export → Netlify/GitHub Pages (incl. `--deploy`) |
+| `dq-static-deploy` | Process | ⬜ proposed | `drush dq:static` (Tome export) → `drush dq:deploy` → Netlify/GitHub Pages |
 | `dq-light-footprint` | Intent | ⬜ proposed | Quality gate: prefer Drupal-native, avoid needless modules, no generated-by markers, semantic markup |
 
 ## Registry skills (install via skills.sh, don't reinvent)

@@ -2,6 +2,8 @@
 
 namespace DrupalQuick\Drush\Commands;
 
+use Drupal\Component\Serialization\Json;
+use Drupal\Component\Serialization\Yaml;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Process\Process;
@@ -48,6 +50,40 @@ trait DrupalQuickHelpers {
       $this->io->write($buffer);
     });
     return $process->getExitCode() ?? 1;
+  }
+
+  /**
+   * Resolves static-export settings (target, uri).
+   *
+   * Persisted Drupal config (drupalquick.static) wins — it survives dq:cleanup,
+   * which deletes config.dq.yml — falling back to the static: block in
+   * config.dq.yml on the first run. Shared by dq:static and dq:deploy.
+   */
+  protected function staticSettings($self): array {
+    $process = Drush::drush($self, 'config:get', ['drupalquick.static', '--format=json']);
+    $process->run();
+    if ($process->isSuccessful()) {
+      $persisted = Json::decode(trim((string) $process->getOutput())) ?: [];
+      if (!empty($persisted['target']) || !empty($persisted['uri'])) {
+        return $persisted;
+      }
+    }
+    $configFile = getcwd() . '/config.dq.yml';
+    if (file_exists($configFile)) {
+      $config = Yaml::decode(file_get_contents($configFile)) ?: [];
+      return $config['static'] ?? [];
+    }
+    return [];
+  }
+
+  /**
+   * Resolves Tome's static output directory (default 'html').
+   */
+  protected function staticDirectory($self): string {
+    $process = Drush::drush($self, 'php:eval', ["echo \\Drupal\\Core\\Site\\Settings::get('tome_static_directory', 'html');"]);
+    $process->run();
+    $dir = trim((string) $process->getOutput());
+    return $dir !== '' ? $dir : 'html';
   }
 
 }

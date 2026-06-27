@@ -72,29 +72,15 @@ final class ScaffoldCommand extends Command {
         $config['site']['name'] ?? 'Drupal Site'
       );
 
-      // Discover skins from the installed starterkit package (extra.dq.skins),
-      // falling back to scanning its skins/ directory.
-      $starterkitDir  = $this->drupalRoot() . '/themes/contrib/dq_starterkit';
-      $availableSkins = [];
-      if (file_exists("{$starterkitDir}/composer.json")) {
-        $meta = json_decode(file_get_contents("{$starterkitDir}/composer.json"), TRUE) ?: [];
-        $availableSkins = $meta['extra']['dq']['skins'] ?? [];
-      }
-      if (!$availableSkins && is_dir("{$starterkitDir}/skins")) {
-        foreach (scandir("{$starterkitDir}/skins") as $file) {
-          if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
-            $availableSkins[] = pathinfo($file, PATHINFO_FILENAME);
-          }
-        }
-      }
-      if (!$availableSkins) {
-        $availableSkins = ['minimal', 'corporate'];
-      }
+      // Discover presets from the installed starterkit (package.json "dq"),
+      // falling back to scanning its presets/ directory.
+      $starterkitDir    = $this->drupalRoot() . '/themes/contrib/dq_starterkit';
+      [$availablePresets, $defaultPreset] = $this->discoverPresets($starterkitDir);
 
-      $config['theme']['style'] = $this->io->choice(
-        'Which design skin would you like to apply?',
-        $availableSkins,
-        $config['theme']['style'] ?? 'minimal'
+      $config['theme']['preset'] = $this->io->choice(
+        'Which design preset would you like to apply?',
+        $availablePresets,
+        $config['theme']['preset'] ?? $defaultPreset
       );
 
       $this->io->writeln("✅ Configuration updated for this session.\n");
@@ -129,7 +115,7 @@ final class ScaffoldCommand extends Command {
     }
     $themeName   = $config['theme']['machine_name'] ?? NULL;
     $themeTitle  = $config['theme']['title'] ?? 'Custom Theme';
-    $themeStyle  = $config['theme']['style'] ?? 'minimal';
+    $themePreset = $config['theme']['preset'] ?? NULL;
     $themeBuild  = $config['theme']['build'] ?? TRUE;
     $recipes     = $config['recipes'] ?? [];
     $parameters  = $config['parameters'] ?? [];
@@ -190,26 +176,28 @@ final class ScaffoldCommand extends Command {
       // is set after recipes (step 3.5) so recipe-set defaults do not clobber it.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
 
-      // Layer theme tokens: starterkit defaults ← chosen skin ← theme_design.
-      // They must land in the entry main.css @theme block (the only place
-      // Tailwind v4 processes @theme).
-      $this->io->writeln("🖌️  Applying '{$themeStyle}' skin and theme_design tokens...");
-      $mainCss = "{$themeDir}/src/main.css";
-      $tokens  = $this->parseThemeTokens(file_get_contents($mainCss));
-
-      $skinSrc = "{$starterkitDir}/skins/{$themeStyle}.css";
-      if (file_exists($skinSrc)) {
-        $tokens = array_merge($tokens, $this->parseThemeTokens(file_get_contents($skinSrc)));
+      // Token application is deferred to the preset step (`npm run preset` in
+      // step 5) — the single source of truth, which also serves re-skinning
+      // after scaffold. Here we only translate config.dq.yml's theme_design into
+      // a persisted overrides file that the preset script layers on top of the
+      // chosen preset. (Tailwind v4 processes @theme at build time, so tokens
+      // can't be applied until the build runs anyway.)
+      $design = $parameters['theme_design'] ?? [];
+      if ($design) {
+        $lines = '';
+        foreach ($design as $key => $value) {
+          $lines .= '  ' . $this->designTokenName($key) . ": {$value};\n";
+        }
+        $presetsDir = "{$themeDir}/presets";
+        if (!is_dir($presetsDir)) {
+          mkdir($presetsDir, 0755, TRUE);
+        }
+        file_put_contents(
+          "{$presetsDir}/overrides.css",
+          "/* theme_design overrides from config.dq.yml — layered over the preset. */\n@theme static {\n{$lines}}\n"
+        );
+        $this->io->writeln('🖌️  Wrote theme_design overrides (presets/overrides.css).');
       }
-      else {
-        $this->io->warning("Skin '{$themeStyle}' not found at {$skinSrc}. Using starterkit defaults.");
-      }
-
-      foreach ($parameters['theme_design'] ?? [] as $key => $value) {
-        $tokens[$this->designTokenName($key)] = $value;
-      }
-
-      $this->writeThemeTokens($mainCss, $tokens);
     }
 
     // 2.5. Assemble recipe submodules into the umbrella module. Each recipe may
@@ -279,25 +267,41 @@ final class ScaffoldCommand extends Command {
       }
     }
 
-    // 5. Build the theme (npm install && npm run build) unless build: false.
-    if ($themeName && $themeBuild) {
+    // 5. Apply the design preset and build the theme. `npm run preset` writes the
+    // chosen preset's tokens into main.css (layering presets/overrides.css),
+    // copies any preset assets, and rebuilds — the same path users re-run later
+    // to change presets. `build: false` stages the tokens without compiling.
+    if ($themeName) {
       $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
-      $this->io->writeln('🔨 Building theme assets (npm install && npm run build)...');
+      $label    = $themePreset ?? '(starterkit default)';
+      $this->io->writeln("🔨 Installing theme deps and applying preset '{$label}'...");
 
-      $buildCode = $this->runProcess(['npm', 'install'], $themeDir);
-      if ($buildCode === 0) {
-        $buildCode = $this->runProcess(['npm', 'run', 'build'], $themeDir);
+      $code = $this->runProcess(['npm', 'install'], $themeDir);
+      if ($code === 0) {
+        // npm run preset [-- <name>] [--no-build]
+        $preset = ['npm', 'run', 'preset'];
+        $extra  = [];
+        if ($themePreset) {
+          $extra[] = $themePreset;
+        }
+        if (!$themeBuild) {
+          $extra[] = '--no-build';
+        }
+        if ($extra) {
+          $preset[] = '--';
+          $preset = array_merge($preset, $extra);
+        }
+        $code = $this->runProcess($preset, $themeDir);
       }
 
-      if ($buildCode !== 0) {
-        $this->io->error("Theme build failed. Check that npm is available and the theme's package.json is valid.");
-        return $buildCode;
+      if ($code !== 0) {
+        $this->io->error("Theme preset/build failed. Check that npm is available and the theme builds.");
+        return $code;
       }
 
-      $this->io->writeln('✅ Theme build complete.');
-    }
-    elseif ($themeName && !$themeBuild) {
-      $this->io->writeln("ℹ️  Theme build skipped (build: false in config). Run `npm install && npm run build` inside themes/custom/{$themeName} when ready.");
+      $this->io->writeln($themeBuild
+        ? '✅ Preset applied and theme built.'
+        : "ℹ️  Preset staged; build skipped (build: false). Run `npm run build` inside themes/custom/{$themeName} when ready.");
     }
 
     $this->io->writeln('🎉 [drupalquick] Scaffold complete. Rebuilding caches...');
@@ -488,16 +492,44 @@ final class ScaffoldCommand extends Command {
   }
 
   /**
-   * Extracts CSS custom property declarations (--name: value;) from CSS text.
+   * Discovers presets from the installed starterkit.
+   *
+   * Reads package.json "dq" (presets + defaultPreset) — the theme's manifest,
+   * which survives generate-theme — falling back to scanning presets/. Returns
+   * [string[] $names, string $default].
    */
-  private function parseThemeTokens(string $css): array {
-    $tokens = [];
-    if (preg_match_all('/(--[\w-]+)\s*:\s*([^;]+);/', $css, $matches, PREG_SET_ORDER)) {
-      foreach ($matches as $match) {
-        $tokens[$match[1]] = trim($match[2]);
+  private function discoverPresets(string $starterkitDir): array {
+    $names   = [];
+    $default = 'minimal';
+
+    $pkg = "{$starterkitDir}/package.json";
+    if (file_exists($pkg)) {
+      $meta    = json_decode(file_get_contents($pkg), TRUE) ?: [];
+      $names   = $meta['dq']['presets'] ?? [];
+      $default = $meta['dq']['defaultPreset'] ?? $default;
+    }
+
+    if (!$names && is_dir("{$starterkitDir}/presets")) {
+      foreach (scandir("{$starterkitDir}/presets") as $file) {
+        if ($file === 'overrides.css' || str_starts_with($file, '.')) {
+          continue;
+        }
+        if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
+          $names[] = pathinfo($file, PATHINFO_FILENAME);
+        }
+        elseif (is_dir("{$starterkitDir}/presets/{$file}") && file_exists("{$starterkitDir}/presets/{$file}/preset.css")) {
+          $names[] = $file;
+        }
       }
     }
-    return $tokens;
+
+    if (!$names) {
+      $names = ['minimal', 'corporate'];
+    }
+    if (!in_array($default, $names, TRUE)) {
+      $default = $names[0];
+    }
+    return [$names, $default];
   }
 
   /**
@@ -511,24 +543,6 @@ final class ScaffoldCommand extends Command {
       return '--font-sans';
     }
     return '--' . str_replace('_', '-', $key);
-  }
-
-  /**
-   * Rewrites the dq:theme block in main.css with the merged token set.
-   */
-  private function writeThemeTokens(string $mainCss, array $tokens): void {
-    $block = "/* dq:theme:start */\n@theme static {\n";
-    foreach ($tokens as $name => $value) {
-      $block .= "  {$name}: {$value};\n";
-    }
-    $block .= "}\n/* dq:theme:end */";
-
-    $css = file_get_contents($mainCss);
-    $css = preg_replace('/\/\* dq:theme:start \*\/.*?\/\* dq:theme:end \*\//s', $block, $css, 1, $count);
-    if (!$count) {
-      $css .= "\n" . $block . "\n";
-    }
-    file_put_contents($mainCss, $css);
   }
 
 }

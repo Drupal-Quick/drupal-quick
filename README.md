@@ -51,7 +51,7 @@ ddev composer exec -- dq-install
 ddev drush dq:scaffold
 ```
 
-`--nodejs-version=20` gives the container a recent Node for the Vite build; set `theme.build: false` to skip it. Pass `--ddev` to `dq-init` to drop in DDEV deploy-credential templates for `dq:static --deploy`.
+`--nodejs-version=20` gives the container a recent Node for the Vite build; set `theme.build: false` to skip it. Pass `--ddev` to `dq-init` to drop in DDEV deploy-credential templates for `dq:deploy`.
 
 ---
 
@@ -66,7 +66,7 @@ site:
 theme:
   machine_name: "my_theme"
   title: "My Theme"
-  style: "minimal"       # a file in starterkits/skins/
+  preset: "minimal"      # a design preset from the starterkit (presets/)
   build: true            # false to skip the npm build
 
 recipes:
@@ -92,7 +92,7 @@ static:                  # optional, used by `drush dq:static`
 ## What you get
 
 - A custom theme at `web/themes/custom/{machine_name}/`, generated from `dq_starterkit` and built with Vite + Tailwind CSS v4.
-- Your chosen design skin and `theme_design` tokens baked into the theme.
+- Your chosen design **preset** (colors, type, optional fonts) plus `theme_design` overrides applied to the theme — swap it anytime with `npm run preset <name>`.
 - Recipe templates merged into the theme and recipe behaviour assembled as native OOP-hook submodules; all recipes applied in order against a minimal install.
 - Module-free [Schema.org JSON-LD](docs/structured-data.md) on content pages (`BlogPosting` for articles, `WebPage` for pages), built from each node's own fields.
 
@@ -100,20 +100,18 @@ static:                  # optional, used by `drush dq:static`
 
 ## Static export
 
-`drush dq:static` installs [Tome](https://tome.fyi), exports the site to static HTML in `html/`, and writes a deploy config for the chosen `static.target` (Netlify or GitHub Pages). Settings persist to Drupal config so they survive `dq:cleanup`. Add `--deploy` to push to Netlify (needs CLI auth). Full workflow and caveats in [docs/static-deploy.md](docs/static-deploy.md).
+`drush dq:static` installs [Tome](https://tome.fyi) and exports the site to static HTML in `html/`. `drush dq:deploy` then writes the deploy config for the chosen `static.target` (Netlify or GitHub Pages) and publishes it (Netlify automated, needs CLI auth). Settings persist to Drupal config so they survive `dq:cleanup`. Full workflow and caveats in [docs/static-deploy.md](docs/static-deploy.md).
 
 ---
 
 ## Requirements
 
-PHP 8.1+ · Drupal 10.3+ or 11 · Drush 12.5+ · Node.js/npm (for the theme build)
+PHP 8.1+ · Drupal 11.1.8+ (recipe modules use module preprocess OOP hooks) · Drush 12.5+ · Node.js/npm (for the theme build)
 
 ---
 
 ## Roadmap
 
 - **Build out the recipe library** beyond the blog proof of concept.
-- **Self-generating recipe catalog** — let recipe packages self-describe (`composer.json` `extra.dq`) and generate the registry from them rather than hand-maintaining it. Design + rationale in [docs/recipe-registry.md](docs/recipe-registry.md).
-- **Skin discovery** from installed package metadata once the starterkit is separate.
 - **User-extensible starterkits and recipes** without editing `vendor/` — design in [docs/extensibility.md](docs/extensibility.md).
 - **Harden static export** and consider a recipe form — see [docs/static-deploy.md](docs/static-deploy.md).

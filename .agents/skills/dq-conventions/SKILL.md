@@ -20,7 +20,7 @@ Three steps (run each through `ddev` under DDEV):
 3. `drush dq:scaffold` — installs Drupal, runs `generate-theme`, applies recipes, builds assets.
 
 Teardown: `drush dq:cleanup` (archives `config.dq.yml`) or `--purge` (deletes it).
-Static export: `drush dq:static` (+ `--deploy`). Commands live in
+Static export: `drush dq:static`; publish: `drush dq:deploy`. Commands live in
 `src/Drush/Commands/DrupalQuickCommands.php`.
 
 ## The STARTERKIT token (theme assets only)
@@ -83,7 +83,10 @@ no dispatcher.
 - Vite dev/HMR: `vite.config.js` writes a `.vite-dev` marker;
   `hook_page_attachments_alter()` swaps `dist/` assets for the live dev server.
   Never commit a `.vite-dev` file.
-- Skin/design tokens are merged into the entry `@theme` so config + skins win.
+- Design tokens live in a **preset** (`presets/<name>.css`); `npm run preset
+  <name>` writes them into the entry `@theme` (`dq:preset` block) and rebuilds.
+  Tailwind v4 compiles `@theme` at build time, so changing a preset needs a
+  rebuild — there's no runtime swap. See `docs/presets.md`.
 
 ## Light-footprint rules
 
