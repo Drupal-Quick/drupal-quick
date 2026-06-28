@@ -1,10 +1,10 @@
 ---
 name: dq-add-recipe
-description: Use when authoring a new drupal-quick recipe — a self-contained bundle of a Drupal recipe.yml, its config, optional theme templates, and a behaviour submodule. Covers the directory layout, config actions, the OOP-hook submodule pattern, and registry registration. Mirror recipe-blog as the reference.
+description: Use when authoring a new Quick recipe — a self-contained bundle of a Drupal recipe.yml, its config, optional theme templates, and a behaviour submodule. Covers the directory layout, config actions, the OOP-hook submodule pattern, and registry registration. Mirror recipe-blog as the reference.
 allowed-tools: Read, Grep, Glob, Write, Edit
 ---
 
-# Author a drupal-quick recipe
+# Author a Quick recipe
 
 A recipe is a self-contained feature: a Drupal [recipe](https://www.drupal.org/project/distributions_recipes)
 plus any config and theme assets it needs, published as its **own standalone
@@ -112,7 +112,7 @@ the single source of truth for its key and label:
 ```
 
 Do **not** hand-edit `templates/recipe-registry.json` — it is a generated cache.
-Run `php bin/dq-registry-build` (or let drupal-quick CI run it) to enumerate the
+Run `php bin/dq-registry-build` (or let Quick CI run it) to enumerate the
 recipe packages, read each `extra.dq.recipe`, and regenerate the registry
 (`{ key: { label, package, url } }`; package + url are derived). See
 `docs/recipe-registry.md`. A one-off recipe can still skip the catalog entirely

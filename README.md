@@ -1,4 +1,4 @@
-# drupal-quick
+# Quick
 
 A Composer package that scaffolds a new Drupal site from a single config file. Run it once to get a working site with a generated custom theme and your chosen recipes applied, then remove it — no long-term dependency on the project.
 
@@ -23,7 +23,7 @@ composer exec dq-install     # fetch any registry recipe packages
 drush dq:scaffold            # install Drupal, generate theme, apply recipes, build assets
 ```
 
-When the site is built, remove drupal-quick — the tool deletes its own code, leaving a self-contained project:
+When the site is built, remove Quick — the tool deletes its own code, leaving a self-contained project:
 
 ```bash
 drush dq:cleanup             # archive config.dq.yml (commented) + remove the package
@@ -80,7 +80,7 @@ parameters:
     font_family: "'Inter', sans-serif"
   recipe_config:
     "system.site":
-      slogan: "Built with drupal-quick."
+      slogan: "Built with Quick."
 
 static:                  # optional, used by `drush dq:static`
   target: "netlify"      # netlify | github | none

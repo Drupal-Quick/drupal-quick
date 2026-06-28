@@ -1,4 +1,4 @@
-# drupal-quick: zero to deployed
+# Quick: zero to deployed
 
 Full workflow from a blank DDEV project to a deployed static site.
 
@@ -22,7 +22,7 @@ ddev start
 
 ---
 
-## 2 — Require drupal-quick
+## 2 — Require Quick
 
 ```bash
 ddev composer require drupal-quick/drupal-quick
@@ -153,4 +153,4 @@ Once the site is deployed and you no longer need the scaffolding tools locally:
 ddev drush dq:cleanup
 ```
 
-Removes the drupal-quick package, redacts `admin_pass` from `config.dq.yml`, and archives it. The deployed static site is unaffected.
+Removes the Quick package, redacts `admin_pass` from `config.dq.yml`, and archives it. The deployed static site is unaffected.

@@ -1,6 +1,6 @@
 # Extensibility: user-supplied starterkits and recipes
 
-This document captures the design for letting **users** extend drupal-quick with
+This document captures the design for letting **users** extend Quick with
 their own starterkit themes and recipes — the same way the first-party
 `dq_starterkit` and bundled recipes work — without editing anything inside
 `vendor/`.
@@ -13,8 +13,8 @@ land **before** any of this work begins.
 ## Goal
 
 A user should be able to publish a recipe or starterkit as a normal Composer
-package and have drupal-quick pick it up — ideally just by `composer require`-ing
-it and naming it in `config.dq.yml`, with no edits to drupal-quick's own files.
+package and have Quick pick it up — ideally just by `composer require`-ing
+it and naming it in `config.dq.yml`, with no edits to Quick's own files.
 
 ---
 
@@ -39,10 +39,10 @@ own repositories/packages. The following were the prerequisites:
    machine-name token (`dq_starterkit`) used throughout for substitution.
 4. Decide where the skins (`starterkits/skins/*.css`) live — most naturally they
    move into the starterkit package too, so skin discovery can read them from the
-   installed theme rather than from drupal-quick.
+   installed theme rather than from Quick.
 5. Tag a release (e.g. `1.0.0`) and publish to Packagist, or document the VCS
    install. A tag avoids the `dev-main` constraint consumers currently need.
-6. In drupal-quick, add the starterkit as a `require` (or document requiring it).
+6. In Quick, add the starterkit as a `require` (or document requiring it).
    Composer's installer places it at `web/themes/contrib/dq_starterkit/`, where
    Drupal discovers it natively — letting `dq:scaffold` drop the temporary
    web-root **staging** step and point `generate-theme` straight at it.
@@ -66,7 +66,7 @@ from the project root) instead of a project-root-relative one. Bundled recipes
 already resolve to absolute paths; external ones must too, or the path handed to
 the `drush recipe` subprocess is fragile.
 
-Once these three are done, drupal-quick no longer *ships* a theme or recipes — it
+Once these three are done, Quick no longer *ships* a theme or recipes — it
 *orchestrates* installed ones. That is the foundation the rest of this design
 builds on.
 
@@ -131,7 +131,7 @@ Drupal modules self-register:
 }
 ```
 
-drupal-quick discovers these by scanning `vendor/composer/installed.json`, which
+Quick discovers these by scanning `vendor/composer/installed.json`, which
 is **readable without a service container** — so it fits the constraint
 `dq:scaffold` already operates under (no reliable container; see why we use
 `Drush::bootstrapManager()->getRoot()` instead of `\Drupal::root()`). With this,
@@ -140,14 +140,14 @@ no central registry entry is needed at all: the package *is* its own entry.
 ### Install-order nuance
 
 Mechanism (B) can only see packages that are **already installed**. If you want
-drupal-quick to auto-install a recipe from a short key (today's external flow),
+Quick to auto-install a recipe from a short key (today's external flow),
 it needs the `package` + `url` *before* installation — which only (A) or the
 built-in registry can provide. The clean split:
 
 - **User runs `composer require acme/recipe-events` themselves** → (B)
   auto-discovers it for application + theme-assets. Zero registry config. This is
   the truest "extend the same way."
-- **User wants drupal-quick to fetch it from a key** → needs (A) or the curated
+- **User wants Quick to fetch it from a key** → needs (A) or the curated
   built-in registry.
 
 **Recommendation:** lean on **(B) as the primary path** and demote the built-in
@@ -174,7 +174,7 @@ Same shape as recipes, with two specific changes:
    discoverable identically — dropping even the staging step.
 
 2. **Skin discovery** should read from the selected starterkit's package rather
-   than drupal-quick's own `starterkits/skins/` directory.
+   than Quick's own `starterkits/skins/` directory.
 
 ---
 

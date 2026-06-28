@@ -100,11 +100,11 @@ hand. It is committed so `dq-init`/`dq-install` work offline and deterministical
 ### When it regenerates
 
 Because the registry **ships inside this package**, users only receive a refresh
-when drupal-quick is released — so the sustainable trigger is **drupal-quick's own
+when Quick is released — so the sustainable trigger is **Quick's own
 CI** running `bin/dq-registry-build` at build/release time (the delivery moment),
 with the script as the reusable engine. Regenerating from *recipe* repos instead
 was rejected: it is N→1 cross-repo coupling and the freshness is illusory (still
-gated on a drupal-quick release). The script needs no Drupal site, so the CI step
+gated on a Quick release). The script needs no Drupal site, so the CI step
 is trivial. To refresh by hand: `php bin/dq-registry-build`.
 
 ### Rejected: pre/post-commit hook generation
@@ -127,7 +127,7 @@ or an **on-demand/CI generator** that runs when recipes actually change.
 Implemented. The registry is slim (`package`/`url`/`label`, with `path` +
 `theme_assets` derived), recipe packages self-describe via `extra.dq.recipe`, and
 `bin/dq-registry-build` regenerates the cache from the GitHub org and/or local
-checkouts — run from drupal-quick's CI
+checkouts — run from Quick's CI
 ([`.github/workflows/recipe-registry.yml`](../.github/workflows/recipe-registry.yml))
 or by hand. A fully file-less live query at `dq-init` remains possible only if
 recipes move to Packagist; not pursued, to keep `dq-init`/`dq-install` offline

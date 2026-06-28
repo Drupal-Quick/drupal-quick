@@ -1,7 +1,7 @@
-# drupal-quick agent skills
+# Quick agent skills
 
 Portable, tool-agnostic [Agent Skills](https://skills.sh) for working on
-drupal-quick. Skills live here (`.agents/skills/`) as the canonical source so
+Quick. Skills live here (`.agents/skills/`) as the canonical source so
 they travel with the repo and work across agents; Claude Code discovers them
 through a symlink (see **Wiring** below).
 
