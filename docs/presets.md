@@ -33,7 +33,7 @@ That single fact drives the whole design below.
 ## Where the logic lives
 
 Applying a preset is a Vite/Tailwind build concern, and it must keep working
-**after drupal-quick has removed itself** (`dq:cleanup`). So the apply logic
+**after Quick has removed itself** (`dq:cleanup`). So the apply logic
 lives in the **theme**, not in a Drush command:
 
 - **`npm run preset [<name>]`** (`scripts/preset.mjs`, pure Node, no deps) is the
@@ -46,7 +46,7 @@ lives in the **theme**, not in a Drush command:
   persisted `presets/overrides.css` (via `designTokenName()`).
 
 This is the resolution of "baked-in vs. changeable": **initial apply by
-drupal-quick, ongoing changeability by the theme.**
+Quick, ongoing changeability by the theme.**
 
 ## Discovery (no registry needed)
 
@@ -97,7 +97,7 @@ name to `package.json` `dq.presets` (optional — `presets/` is also scanned), t
 - Presets are theme-owned, self-contained token sets; discovery is just reading
   the installed starterkit's `package.json` — **no registry**.
 - Switching is a build operation (`npm run preset`), inherent to Tailwind v4.
-- The apply script is the single source of truth and survives drupal-quick's
+- The apply script is the single source of truth and survives Quick's
   removal; `dq:scaffold` calls it for the initial apply.
 - A resilient default fallback (`minimal`) means a missing/unknown preset never
   breaks scaffolding.

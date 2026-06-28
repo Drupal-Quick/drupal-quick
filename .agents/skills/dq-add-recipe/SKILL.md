@@ -1,20 +1,26 @@
 ---
 name: dq-add-recipe
-description: Use when authoring a new drupal-quick recipe — a self-contained bundle of a Drupal recipe.yml, its config, optional theme templates, and a behaviour submodule. Covers the directory layout, config actions, the OOP-hook submodule pattern, and registry registration. Mirror recipe-blog as the reference.
+description: Use when authoring a new Quick recipe — a self-contained bundle of a Drupal recipe.yml, its config, optional theme templates, and a behaviour submodule. Covers the directory layout, config actions, the OOP-hook submodule pattern, and registry registration. Mirror recipe-blog as the reference.
 allowed-tools: Read, Grep, Glob, Write, Edit
 ---
 
-# Author a drupal-quick recipe
+# Author a Quick recipe
 
 A recipe is a self-contained feature: a Drupal [recipe](https://www.drupal.org/project/distributions_recipes)
-plus any config and theme assets it needs. Keep it **self-contained** — it ships
-everything it touches and leaves no trace in unrelated files. Use `recipes/blog/`
-as the canonical example.
+plus any config and theme assets it needs, published as its **own standalone
+Composer package** (`type: drupal-recipe`) in its own repo. Keep it
+**self-contained** — it ships everything it touches and leaves no trace in
+unrelated files. Use the [`recipe-blog`](https://github.com/Drupal-Quick/recipe-blog)
+package as the canonical example.
 
 ## Layout
 
+The recipe's files live at the **package root** (not under a `recipes/` folder —
+that's only the consumer's unpack location):
+
 ```
-recipes/<name>/
+recipe-<name>/                         # the package repo root
+├── composer.json                      # type: drupal-recipe, extra.dq.recipe
 ├── recipe.yml                         # the Drupal recipe (install: lists the submodule)
 ├── config/                            # config this recipe creates
 │   ├── field.storage.node.field_x.yml
@@ -63,7 +69,7 @@ class in `src/Hook/` with `#[Hook]` methods. Register under the **base hook** an
 narrow by bundle/view id (the base hook fires for every bundle):
 
 ```php
-// recipes/<name>/module/src/Hook/<Name>Hooks.php
+// recipe-<name>/module/src/Hook/<Name>Hooks.php
 namespace Drupal\dq_blog\Hook;
 use Drupal\Core\Hook\Attribute\Hook;
 
@@ -106,7 +112,7 @@ the single source of truth for its key and label:
 ```
 
 Do **not** hand-edit `templates/recipe-registry.json` — it is a generated cache.
-Run `php bin/dq-registry-build` (or let drupal-quick CI run it) to enumerate the
+Run `php bin/dq-registry-build` (or let Quick CI run it) to enumerate the
 recipe packages, read each `extra.dq.recipe`, and regenerate the registry
 (`{ key: { label, package, url } }`; package + url are derived). See
 `docs/recipe-registry.md`. A one-off recipe can still skip the catalog entirely

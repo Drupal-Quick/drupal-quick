@@ -1,10 +1,10 @@
 ---
 name: dq-structured-data
-description: Use when adding or changing Schema.org JSON-LD / structured data on a drupal-quick content type. Enforces the module-free, hand-built approach (no Metatag/SEO module) with correct safety, absolute URLs, and view-mode scoping. See docs/structured-data.md.
+description: Use when adding or changing Schema.org JSON-LD / structured data on a Quick content type. Enforces the module-free, hand-built approach (no Metatag/SEO module) with correct safety, absolute URLs, and view-mode scoping. See docs/structured-data.md.
 allowed-tools: Read, Grep, Glob, Write, Edit
 ---
 
-# Structured data the drupal-quick way
+# Structured data the Quick way
 
 Emit Schema.org JSON-LD **by hand from each node's own fields** — no Metatag or
 SEO module. Keeps the footprint light and survives the Tome static export

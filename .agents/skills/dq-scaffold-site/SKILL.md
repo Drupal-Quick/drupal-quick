@@ -1,9 +1,9 @@
 ---
 name: dq-scaffold-site
-description: Use when provisioning a new Drupal site with drupal-quick from scratch — the dq-init → dq-install → drush dq:scaffold flow, on the host or inside DDEV. Covers config.dq.yml, verification, and teardown.
+description: Use when provisioning a new Drupal site with Quick from scratch — the dq-init → dq-install → drush dq:scaffold flow, on the host or inside DDEV. Covers config.dq.yml, verification, and teardown.
 ---
 
-# Scaffold a drupal-quick site
+# Scaffold a Quick site
 
 Provision a working Drupal site from an empty project. Prefer **DDEV** so PHP,
 Composer, the database, and Node/npm all come from the container.

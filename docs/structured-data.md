@@ -1,6 +1,6 @@
 # Structured data: Schema.org JSON-LD without a module
 
-drupal-quick emits [Schema.org](https://schema.org) structured data as JSON-LD
+Quick emits [Schema.org](https://schema.org) structured data as JSON-LD
 on its content pages **by hand, from each node's own fields** — no Metatag or
 SEO module is installed. This keeps the footprint light and the output fully
 static-export friendly: the markup is plain HTML that [Tome](https://tome.fyi)
@@ -19,7 +19,7 @@ The goal is two complementary layers on every content page:
 
 | Content type | Schema.org type | Where it lives | Source |
 | --- | --- | --- | --- |
-| Article (blog recipe) | `BlogPosting` | inline in the article `<body>` via `{{ structured_data }}` | `recipes/blog/theme-assets/` |
+| Article (blog recipe) | `BlogPosting` | inline in the article `<body>` via `{{ structured_data }}` | `recipe-blog` (`module/` builds it, `theme-assets/` template prints it) |
 | Basic Page | `WebPage` | in the document `<head>` via an `html_head` attachment | starterkit `.theme` |
 
 Both placements are valid — Google accepts JSON-LD in either the `<head>` or the
@@ -105,7 +105,7 @@ overrides, a module is the better fit:
   recommended upgrade path from the built-in markup.
 - **[Schema.org Blueprints](https://www.drupal.org/project/schemadotorg)** —
   builds entity types directly from Schema.org definitions. Powerful, but a
-  heavy install — the opposite of drupal-quick's light footprint. Reach for it
+  heavy install — the opposite of Quick's light footprint. Reach for it
   only when modelling complex, schema-first content.
 
 If you adopt Metatag + Schema.org Metatag, drop the `{{ structured_data }}`

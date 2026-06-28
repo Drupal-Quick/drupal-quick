@@ -1,6 +1,6 @@
 # Static site export and deploy (Tome)
 
-drupalquick's goal is *quick* in two senses: fast provisioning **and** a fast
+Quick's goal is *quick* in two senses: fast provisioning **and** a fast
 end result. Part of that is the ability to ship the finished site as a static,
 HTML-only build — provision Drupal locally, scaffold a theme and content, remove
 every trace of Quick, then deploy a performant static site.
@@ -14,13 +14,13 @@ output is plain HTML/CSS/JS rendered by Drupal itself.
 ## Why Tome
 
 - **Drush-driven** (`drush tome:static`) — the same execution model the rest of
-  drupalquick uses.
+  Quick uses.
 - **Plain HTML output.** Tome renders every anonymous-accessible route and
   entity canonical path through Drupal's own HTTP kernel, then collects the
   referenced stylesheets, scripts, images (incl. `srcset`), favicons, and pager
   links. The theme's built `dist/main.css` / `dist/main.js` are captured as-is.
 - **Reinforces "no footprint of Quick."** The deployed artifact is just static
-  files — no Drupal, no PHP, no drupalquick. Drupal + Tome remain locally as the
+  files — no Drupal, no PHP, no Quick. Drupal + Tome remain locally as the
   authoring/build environment; `dq:cleanup` still removes Quick itself.
 - **Deploy targets built in** — Tome documents GitHub Pages, Netlify, Render,
   and more.
