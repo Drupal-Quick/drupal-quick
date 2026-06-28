@@ -18,11 +18,15 @@ it and naming it in `config.dq.yml`, with no edits to drupal-quick's own files.
 
 ---
 
-## Prerequisites — do these first
+## Prerequisites — ✅ complete
+
+> **Status:** done. The starterkit (`drupal-quick/dq_starterkit`) and the recipes
+> (`recipe-blog`, `recipe-project`) now live in their own repos/packages, and
+> external recipe path resolution is fixed. The steps below are kept as the
+> record of that work; the design that follows builds on it.
 
 This design assumes the theme and the non-bundled recipes already live in their
-own repositories/packages. None of the extensibility work below should start
-until the following are in place. (These mirror the existing README to-do items.)
+own repositories/packages. The following were the prerequisites:
 
 ### 1. Extract `dq_starterkit` into its own `drupal-theme` package
 
@@ -57,7 +61,7 @@ until the following are in place. (These mirror the existing README to-do items.
 ### 3. Fix external recipe path resolution
 
 When the first non-bundled recipe ships, update `resolvePath()` in
-`DrupalQuickCommands.php` so external entries return an **absolute** path (built
+`ScaffoldCommand.php` so external entries return an **absolute** path (built
 from the project root) instead of a project-root-relative one. Bundled recipes
 already resolve to absolute paths; external ones must too, or the path handed to
 the `drush recipe` subprocess is fragile.

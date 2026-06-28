@@ -19,7 +19,7 @@ The goal is two complementary layers on every content page:
 
 | Content type | Schema.org type | Where it lives | Source |
 | --- | --- | --- | --- |
-| Article (blog recipe) | `BlogPosting` | inline in the article `<body>` via `{{ structured_data }}` | `recipes/blog/theme-assets/` |
+| Article (blog recipe) | `BlogPosting` | inline in the article `<body>` via `{{ structured_data }}` | `recipe-blog` (`module/` builds it, `theme-assets/` template prints it) |
 | Basic Page | `WebPage` | in the document `<head>` via an `html_head` attachment | starterkit `.theme` |
 
 Both placements are valid — Google accepts JSON-LD in either the `<head>` or the

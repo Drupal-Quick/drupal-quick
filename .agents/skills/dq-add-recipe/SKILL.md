@@ -7,14 +7,20 @@ allowed-tools: Read, Grep, Glob, Write, Edit
 # Author a drupal-quick recipe
 
 A recipe is a self-contained feature: a Drupal [recipe](https://www.drupal.org/project/distributions_recipes)
-plus any config and theme assets it needs. Keep it **self-contained** — it ships
-everything it touches and leaves no trace in unrelated files. Use `recipes/blog/`
-as the canonical example.
+plus any config and theme assets it needs, published as its **own standalone
+Composer package** (`type: drupal-recipe`) in its own repo. Keep it
+**self-contained** — it ships everything it touches and leaves no trace in
+unrelated files. Use the [`recipe-blog`](https://github.com/Drupal-Quick/recipe-blog)
+package as the canonical example.
 
 ## Layout
 
+The recipe's files live at the **package root** (not under a `recipes/` folder —
+that's only the consumer's unpack location):
+
 ```
-recipes/<name>/
+recipe-<name>/                         # the package repo root
+├── composer.json                      # type: drupal-recipe, extra.dq.recipe
 ├── recipe.yml                         # the Drupal recipe (install: lists the submodule)
 ├── config/                            # config this recipe creates
 │   ├── field.storage.node.field_x.yml
@@ -63,7 +69,7 @@ class in `src/Hook/` with `#[Hook]` methods. Register under the **base hook** an
 narrow by bundle/view id (the base hook fires for every bundle):
 
 ```php
-// recipes/<name>/module/src/Hook/<Name>Hooks.php
+// recipe-<name>/module/src/Hook/<Name>Hooks.php
 namespace Drupal\dq_blog\Hook;
 use Drupal\Core\Hook\Attribute\Hook;
 

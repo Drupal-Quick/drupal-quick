@@ -21,7 +21,9 @@ Three steps (run each through `ddev` under DDEV):
 
 Teardown: `drush dq:cleanup` (archives `config.dq.yml`) or `--purge` (deletes it).
 Static export: `drush dq:static`; publish: `drush dq:deploy`. Commands live in
-`src/Drush/Commands/DrupalQuickCommands.php`.
+`src/Drush/Commands/` (one class per command: `ScaffoldCommand`,
+`CleanupCommand`, `StaticExportCommand`, `DeployCommand`; shared logic in the
+`DrupalQuickHelpers` trait).
 
 ## The STARTERKIT token (theme assets only)
 
@@ -75,7 +77,7 @@ no dispatcher.
 
 ## Theme build (Vite + Tailwind v4)
 
-- Source in `starterkits/dq_starterkit/src/`; build emits `dist/main.css|js`.
+- Source in the starterkit package's `src/`; build emits `dist/main.css|js`.
 - CSS is **inlined** into `html.html.twig` (`preprocess_html`), and the linked
   copy is removed in `hook_css_alter()` — don't re-add a `<link>`.
 - JS assets in `*.libraries.yml` use `attributes: { type: module }`, NOT
@@ -100,9 +102,17 @@ no dispatcher.
 
 ## Where things live
 
-- Starterkit theme: `starterkits/dq_starterkit/` (`.theme`, `templates/`, `src/`).
-- Recipes: `recipes/<name>/` (`recipe.yml`, `config/`, `theme-assets/` templates,
-  `module/` behaviour assembled under `modules/custom/dq_hooks/modules/`).
-- Commands: `src/Drush/Commands/DrupalQuickCommands.php`.
+This repo is **orchestrator-only**; the theme and recipes are separate packages.
+
+- Starterkit theme: the `drupal-quick/dq_starterkit` package (own repo) —
+  `.theme`, `templates/`, `src/`, `presets/`.
+- Recipes: standalone `drupal-recipe` packages (own repos, e.g. `recipe-blog`) —
+  `recipe.yml`, `config/`, `theme-assets/` templates, `module/` behaviour. At
+  scaffold time recipes unpack to the consumer's `recipes/<name>/` and their
+  `module/` is assembled under `modules/custom/dq_hooks/modules/`.
+- Commands (this repo): `src/Drush/Commands/` (`ScaffoldCommand`,
+  `CleanupCommand`, `StaticExportCommand`, `DeployCommand`; `DrupalQuickHelpers`
+  trait). Standalone CLI scripts in `bin/` (`dq-init`, `dq-install`,
+  `dq-registry-build`).
 - Config/registry: `templates/config.dq.yml`, `templates/recipe-registry.json`.
 - Design notes: `docs/extensibility.md`, `docs/static-deploy.md`, `docs/structured-data.md`.
