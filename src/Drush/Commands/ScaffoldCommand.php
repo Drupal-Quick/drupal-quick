@@ -269,8 +269,15 @@ final class ScaffoldCommand extends Command {
 
     // 5. Apply the design preset and build the theme. `npm run preset` writes the
     // chosen preset's tokens into main.css (layering presets/overrides.css),
-    // copies any preset assets, and rebuilds — the same path users re-run later
-    // to change presets. `build: false` stages the tokens without compiling.
+    // fetches any preset fonts on demand, and rebuilds — the same path users
+    // re-run later to change presets. `build: false` stages the tokens without
+    // compiling.
+    //
+    // @todo generate-theme copies the whole presets/ tree into the theme, so all
+    //   presets (not just the chosen one) ship in the generated site — retained
+    //   for now because they make re-skinning and testing easy, and fonts are no
+    //   longer bundled so an unused preset costs only a little CSS + JSON. Revisit
+    //   pruning the unselected presets at scaffold once the catalogue grows.
     if ($themeName) {
       $themeDir = $this->drupalRoot() . "/themes/custom/{$themeName}";
       $label    = $themePreset ?? '(starterkit default)';
@@ -492,11 +499,13 @@ final class ScaffoldCommand extends Command {
   }
 
   /**
-   * Discovers presets from the installed starterkit.
+   * Discovers presets from the installed starterkit's package.json "dq".
    *
-   * Reads package.json "dq" (presets + defaultPreset) — the theme's manifest,
-   * which survives generate-theme — falling back to scanning presets/. Returns
-   * [string[] $names, string $default].
+   * The "dq" block (presets + defaultPreset) is the single source of truth and
+   * travels intact through generate-theme, so there is no need to scan presets/;
+   * a hardcoded set is the last resort if the manifest can't be read. The same
+   * contract is read by bin/dq-init and scripts/preset.mjs — keep them in step.
+   * Returns [string[] $names, string $default].
    */
   private function discoverPresets(string $starterkitDir): array {
     $names   = [];
@@ -507,20 +516,6 @@ final class ScaffoldCommand extends Command {
       $meta    = json_decode(file_get_contents($pkg), TRUE) ?: [];
       $names   = $meta['dq']['presets'] ?? [];
       $default = $meta['dq']['defaultPreset'] ?? $default;
-    }
-
-    if (!$names && is_dir("{$starterkitDir}/presets")) {
-      foreach (scandir("{$starterkitDir}/presets") as $file) {
-        if ($file === 'overrides.css' || str_starts_with($file, '.')) {
-          continue;
-        }
-        if (pathinfo($file, PATHINFO_EXTENSION) === 'css') {
-          $names[] = pathinfo($file, PATHINFO_FILENAME);
-        }
-        elseif (is_dir("{$starterkitDir}/presets/{$file}") && file_exists("{$starterkitDir}/presets/{$file}/preset.css")) {
-          $names[] = $file;
-        }
-      }
     }
 
     if (!$names) {

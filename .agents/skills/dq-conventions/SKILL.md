@@ -88,7 +88,12 @@ no dispatcher.
 - Design tokens live in a **preset** (`presets/<name>.css`); `npm run preset
   <name>` writes them into the entry `@theme` (`dq:preset` block) and rebuilds.
   Tailwind v4 compiles `@theme` at build time, so changing a preset needs a
-  rebuild — there's no runtime swap. See `docs/presets.md`.
+  rebuild — there's no runtime swap. Available presets + the default are declared
+  in `package.json` `dq.*` (the source of truth for discovery); a `prebuild` hook
+  re-applies the active preset so a bare `npm run build` self-heals.
+- Self-hosted fonts are pulled **on demand**: a directory preset's `fonts.json`
+  pins a URL + `sha256`, fetched into `src/fonts/` (gitignored) at preset time —
+  **never commit font binaries**. See `docs/presets.md`.
 
 ## Light-footprint rules
 

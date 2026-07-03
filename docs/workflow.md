@@ -82,9 +82,9 @@ This single command:
 
 1. Installs Drupal (`drush site:install`)
 2. Generates a real theme from the starterkit (`drupal generate-theme`)
-3. Applies the chosen design preset (`npm run preset`) and any `theme_design` overrides
+3. Writes any `theme_design` overrides from `config.dq.yml` to `presets/overrides.css`
 4. Applies each recipe in order (`drush recipe …`), injecting recipe `theme-assets/` into the theme
-5. Runs `npm install && npm run build` in the theme (unless `build: false`)
+5. Installs deps and applies the chosen design preset — `npm install && npm run preset` — which fetches any preset fonts and builds the theme (unless `build: false`)
 6. Applies any `recipe_config` overrides
 7. Rebuilds caches
 

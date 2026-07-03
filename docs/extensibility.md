@@ -37,9 +37,9 @@ own repositories/packages. The following were the prerequisites:
    `dq_starterkit.starterkit.yml` marker, a concrete `version:` in
    `dq_starterkit.info.yml` (so `generate-theme` runs non-interactively), and the
    machine-name token (`dq_starterkit`) used throughout for substitution.
-4. Decide where the skins (`starterkits/skins/*.css`) live — most naturally they
-   move into the starterkit package too, so skin discovery can read them from the
-   installed theme rather than from Quick.
+4. Decide where the design presets live — most naturally in the starterkit
+   package itself (as `presets/`, declared in its `package.json` `dq.presets`), so
+   preset discovery reads them from the installed theme rather than from Quick.
 5. Tag a release (e.g. `1.0.0`) and publish to Packagist, or document the VCS
    install. A tag avoids the `dev-main` constraint consumers currently need.
 6. In Quick, add the starterkit as a `require` (or document requiring it).
@@ -173,8 +173,8 @@ Same shape as recipes, with two specific changes:
    prerequisites), user starterkits land in `web/themes/contrib/` and are
    discoverable identically — dropping even the staging step.
 
-2. **Skin discovery** should read from the selected starterkit's package rather
-   than Quick's own `starterkits/skins/` directory.
+2. **Preset discovery** should read from the selected starterkit's package
+   (`package.json` `dq.presets`) rather than a Quick-owned directory.
 
 ---
 
@@ -212,8 +212,8 @@ user-supplied — behave consistently.
    above.
 2. **Un-gate theme-asset injection** from the registry (smallest, highest-value
    change; benefits first-party recipes immediately).
-3. **Parameterize the starterkit** (`theme.starterkit` in config) and move skin
-   discovery to the starterkit package.
+3. **Parameterize the starterkit** (`theme.starterkit` in config) and read preset
+   discovery from the selected starterkit package.
 4. **Merge registry sources** — add the `config.dq.yml` `sources:` section (A).
 5. **Auto-discovery** via `composer.json` `extra` + `installed.json` (B); make it
    the primary path and demote the built-in registry to curated convenience.

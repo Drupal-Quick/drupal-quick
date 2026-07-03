@@ -14,14 +14,14 @@ properties (colors, `--font-sans`, spacing, the reading surface). Two forms:
 
 ```
 presets/minimal.css                 # simple: just the @theme tokens
-presets/corporate/
+presets/geometric/
 ├── preset.css                      # the @theme tokens
-├── extra.css                       # optional: @font-face / extra CSS
-└── fonts/                          # optional: self-hosted font files
+└── fonts.json                      # optional: self-hosted webfonts (pinned URL + sha256)
 ```
 
-The two shipped presets (`minimal`, `corporate`) are the simple form. `minimal`
-is the **default fallback**.
+The shipped presets are `minimal`, `corporate` (both simple form), and
+`geometric` (directory form, self-hosted font). `minimal` is the **default
+fallback**.
 
 ## The one hard constraint
 
@@ -36,10 +36,12 @@ Applying a preset is a Vite/Tailwind build concern, and it must keep working
 **after Quick has removed itself** (`dq:cleanup`). So the apply logic
 lives in the **theme**, not in a Drush command:
 
-- **`npm run preset [<name>]`** (`scripts/preset.mjs`, pure Node, no deps) is the
-  single source of truth. It writes the chosen preset's tokens into the
-  `dq:preset` block of `src/main.css`, layers `presets/overrides.css`, copies any
-  preset assets, then rebuilds. Re-runnable forever.
+- **`npm run preset [<name>]`** (`scripts/preset.mjs`, pure Node — global `fetch`
+  + `node:crypto`, no deps) is the single source of truth. It writes the chosen
+  preset's tokens into the `dq:preset` block of `src/main.css`, layers
+  `presets/overrides.css`, fetches any preset fonts on demand (see **Assets**
+  below), records the active preset in `package.json`, then rebuilds. Re-runnable
+  forever.
 - **`dq:scaffold`** does the *initial* apply by simply calling that script
   (`npm run preset -- <name>`); it never re-implements token logic. Its only
   preset-specific job is translating `config.dq.yml`'s `theme_design` into the
@@ -48,6 +50,16 @@ lives in the **theme**, not in a Drush command:
 This is the resolution of "baked-in vs. changeable": **initial apply by
 Quick, ongoing changeability by the theme.**
 
+### Self-healing builds
+
+Because fonts and `dist/` are gitignored (see **Assets**), a bare `npm run build`
+on a fresh clone would otherwise be missing them. A **`prebuild`** hook
+(`node scripts/preset.mjs --sync`) runs before every build and re-applies the
+**active** preset — re-fetching fonts and regenerating `main.css` — so `npm run
+build` alone always produces a correct, self-contained result. The active preset
+is persisted to `package.json` `dq.activePreset` (written whenever `npm run
+preset` runs), so it is committed with the site and reproduced on any clone.
+
 ## Discovery (no registry needed)
 
 Unlike recipes, every preset lives inside the *one already-installed* starterkit
@@ -55,11 +67,15 @@ package — there is **no pre-install enumeration problem**, so there is **no
 registry/generator** (the recipe-registry machinery does not apply here).
 
 - The starterkit's `package.json` declares `dq.presets` (the list) and
-  `dq.defaultPreset` (the fallback). `package.json` is the theme's manifest and
-  survives `generate-theme`, so both `dq:scaffold` (for the interactive menu, via
-  `discoverPresets()`) and `npm run preset` (for the fallback) read it.
-- Fallback chain when no preset is named: `dq.defaultPreset` → `minimal` → first
-  preset found in `presets/`. Resilient by default — an unset or unknown preset
+  `dq.defaultPreset` (the fallback) — the **single source of truth**.
+  `package.json` is the theme's manifest and survives `generate-theme`, so
+  `dq:scaffold` (interactive menu, via `discoverPresets()`), `bin/dq-init`, and
+  `npm run preset` all read the same block. It travels intact, so there is no
+  filesystem scan; a hardcoded `['minimal', 'corporate']` is the last resort if
+  the manifest can't be read.
+- Fallback chain when no preset is named: `dq.defaultPreset` → `minimal`. If a
+  *named* preset has no token file, the script warns and falls back to `minimal`
+  (or the first available). Resilient by default — an unset or unknown preset
   never breaks the build.
 
 ## Token layering
@@ -75,22 +91,44 @@ chosen preset  ←  presets/overrides.css (theme_design from config.dq.yml)
 `overrides.css` persists, so it survives re-skinning: `npm run preset corporate`
 keeps the user's `theme_design` tweaks on top of the new preset.
 
-## Assets (fonts, extra CSS)
+## Assets (self-hosted fonts, on demand)
 
-The directory form lets a preset ship more than tokens. On apply, the script:
+The directory form lets a preset self-host webfonts **without committing any
+binary**. `presets/<name>/fonts.json` pins each font's download URL (a Google
+Fonts / gstatic `woff2`) and `sha256`. On apply, the script:
 
-1. copies `presets/<name>/fonts/*` → `src/fonts/` (self-hosted — keeps the Tome
-   static export self-contained, no external font requests), and
-2. injects `presets/<name>/extra.css` (e.g. `@font-face`) into a managed
+1. **downloads** each font into `src/fonts/` (gitignored) only when that preset
+   is applied, **verifying** it against the pinned `sha256` — reusing any cached
+   copy, so a repeat apply doesn't re-fetch;
+2. **generates** the `@font-face` rules from the manifest into a managed
    `dq:preset-extra` block in `main.css`, clearing it when switching back to a
-   token-only preset.
+   token-only preset; and
+3. **prunes** any files in `src/fonts/` the active preset no longer needs.
+
+The font is bundled into `dist/` by Vite, so the built site is self-contained
+(no external font request at render time — good for the Tome static export). The
+trade-off: a first build needs **network access**, on the assumption you build
+right after cloning. Nothing font-shaped ships in the repo, and an unused
+directory-preset costs only a little CSS + JSON.
+
+```json
+// presets/geometric/fonts.json
+{ "fonts": [{
+  "family": "Geom", "weight": 400, "style": "normal", "display": "swap",
+  "file": "Geom-latin.woff2",
+  "url": "https://fonts.gstatic.com/s/geom/v1/…woff2",
+  "sha256": "ae1748bec04bf4e0…"
+}] }
+```
+
+Grab the `woff2` URL + hash from [google-webfonts-helper](https://gwfh.mranftl.com).
 
 ## Making / importing a preset
 
 Copy `presets/minimal.css` to `presets/<name>.css` and edit, or create
-`presets/<name>/preset.css` (+ `fonts/`, `extra.css`) for the rich form. Add the
-name to `package.json` `dq.presets` (optional — `presets/` is also scanned), then
-`npm run preset <name>`.
+`presets/<name>/preset.css` (+ `fonts.json`) for the self-hosted-font form. Add
+the name to `package.json` `dq.presets` (that list is authoritative for
+discovery), then `npm run preset <name>`.
 
 ## Summary
 
