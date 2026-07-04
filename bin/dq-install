@@ -22,10 +22,16 @@
  * dependency. Composer only activates plugins declared at the root level, so
  * this package cannot declare it on the project's behalf — it must live in
  * the consumer's own composer.json.
+ *
+ * After installing, each recipe's user-tunable options (recipe.yml `input:`)
+ * are written back into config.dq.yml as a COMMENTED block under that recipe's
+ * entry, ready to uncomment. Pass --exclude-options to only list them in the
+ * terminal and leave config.dq.yml untouched.
  */
 
-$packageRoot = dirname(__DIR__);
-$projectRoot = getcwd();
+$packageRoot    = dirname(__DIR__);
+$projectRoot    = getcwd();
+$excludeOptions = in_array('--exclude-options', $argv, true);
 
 // Load the project autoloader so Symfony YAML is available.
 $autoload = $projectRoot . '/vendor/autoload.php';
@@ -34,6 +40,11 @@ if (!file_exists($autoload)) {
 }
 require_once $autoload;
 
+// The injection logic is a plain class in this package — required directly so
+// it resolves regardless of the consumer autoloader's state.
+require_once $packageRoot . '/src/Config/RecipeOptions.php';
+
+use DrupalQuick\Config\RecipeOptions;
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Process\Process;
@@ -52,6 +63,10 @@ function run_command(array $command, string $cwd): int {
     });
     return $process->getExitCode() ?? 1;
 }
+
+// The option-line rendering and commented-block injection live in
+// DrupalQuick\Config\RecipeOptions (required above) so they are unit-testable;
+// see tests/Unit/Config/RecipeOptionsTest.php.
 
 // ------------------------------------------------------------------ Config
 
@@ -123,8 +138,13 @@ if (!in_array($peerPackage, $rootRequire, true)) {
 $toRequire = [];
 
 foreach ($recipes as $recipe) {
-    // A recipe entry is a registry key, an inline package spec
-    // ({package, url}), or a core/contrib path string (no Composer action).
+    // A recipe entry is a registry key, {name, options} (options map to the
+    // recipe's native inputs — consumed by dq:scaffold, not here), an inline
+    // package spec ({package, url, options?}), or a core/contrib path string
+    // (no Composer action).
+    if (is_array($recipe) && isset($recipe['name'])) {
+        $recipe = $recipe['name'];
+    }
     if (is_array($recipe)) {
         $package = $recipe['package'] ?? null;
         $url     = $recipe['url'] ?? '';
@@ -190,4 +210,72 @@ foreach ($toRequire as $package) {
 }
 
 echo "\n✅ Recipe packages installed.\n";
-echo "   Run `drush dq:scaffold` to build your site.\n";
+
+// --------------------------------------------------------------- Options
+// Each managed recipe may declare user-tunable options as native recipe inputs
+// (recipe.yml `input:`). Now that the packages are unpacked we can read them.
+//
+//   default            → write them, commented, into the matching recipe entry
+//                        in config.dq.yml. The user uncomments to enable; every
+//                        input has a default, so an untouched file still works.
+//   --exclude-options  → print them to the terminal instead, touching no file.
+//
+// Collect [config key => input definitions] for registry recipes with inputs.
+$recipeOptions = [];
+foreach ($recipes as $recipe) {
+    if (is_array($recipe) && isset($recipe['name'])) {
+        $key = $recipe['name'];
+    } elseif (is_string($recipe)) {
+        $key = $recipe;
+    } else {
+        continue; // inline package spec — no stable key to locate in the file
+    }
+    if (!isset($registry[$key]['package'])) {
+        continue; // core/contrib path, or a key with no registry entry
+    }
+    $pkg        = $registry[$key]['package'];
+    $short      = ($pos = strpos($pkg, '/')) !== false ? substr($pkg, $pos + 1) : $pkg;
+    $recipeFile = $projectRoot . '/recipes/' . $short . '/recipe.yml';
+    if (!file_exists($recipeFile)) {
+        continue;
+    }
+    try {
+        $recipeData = Yaml::parseFile($recipeFile);
+    } catch (ParseException) {
+        continue;
+    }
+    if (!empty($recipeData['input'])) {
+        $recipeOptions[$key] = $recipeData['input'];
+    }
+}
+
+if (!empty($recipeOptions) && $excludeOptions) {
+    echo "\nℹ️  Optional recipe settings — set under `options:` on the recipe's entry\n";
+    echo "   in config.dq.yml (defaults apply when unset):\n";
+    foreach ($recipeOptions as $key => $inputs) {
+        echo "   {$key}:\n";
+        foreach ($inputs as $name => $def) {
+            $description = $def['description'] ?? '';
+            $default     = $def['default']['value'] ?? null;
+            $defaultText = is_scalar($default) ? ' [default: ' . var_export($default, true) . ']' : '';
+            echo "     - {$name}: {$description}{$defaultText}\n";
+        }
+    }
+} elseif (!empty($recipeOptions)) {
+    $lines    = explode("\n", file_get_contents($configFile));
+    $injected = [];
+    foreach ($recipeOptions as $key => $inputs) {
+        $before = $lines;
+        $lines  = RecipeOptions::injectCommented($lines, $key, RecipeOptions::activeLines($inputs));
+        if ($lines !== $before) {
+            $injected[] = $key;
+        }
+    }
+    if ($injected) {
+        file_put_contents($configFile, implode("\n", $lines));
+        echo "\nℹ️  Wrote commented recipe options into config.dq.yml for: " . implode(', ', $injected) . ".\n";
+        echo "   Uncomment (remove the leading `# `) under each recipe to override its defaults.\n";
+    }
+}
+
+echo "\n   Run `drush dq:scaffold` to build your site.\n";

@@ -33,6 +33,12 @@ $destination = $projectRoot . '/config.dq.yml';
 $interactive = in_array('--interactive', $argv, true);
 $ddev        = in_array('--ddev', $argv, true);
 
+// Preset discovery is a plain class in this package — required directly, so
+// the script keeps working without any Composer autoloader.
+require_once $packageRoot . '/src/Config/PresetDiscovery.php';
+
+use DrupalQuick\Config\PresetDiscovery;
+
 // ------------------------------------------------------------------ Helpers
 
 function ask(string $question, string $default = ''): string {
@@ -121,23 +127,16 @@ $themeTitle   = ask('Theme display name', 'My Theme');
 // Discover presets from the installed starterkit's package.json "dq" metadata
 // (presets + defaultPreset) — the single source of truth, which travels intact
 // through generate-theme. The starterkit ships as drupal-quick/dq_starterkit,
-// installed at web/themes/contrib/dq_starterkit; a hardcoded set is the last
-// resort if that manifest can't be read.
-$starterkitDir = $projectRoot . '/web/themes/contrib/dq_starterkit';
-$presets       = [];
-$defaultPreset = 'minimal';
-if (file_exists($starterkitDir . '/package.json')) {
-    $meta          = json_decode(file_get_contents($starterkitDir . '/package.json'), true) ?: [];
-    $presets       = $meta['dq']['presets'] ?? [];
-    $defaultPreset = $meta['dq']['defaultPreset'] ?? $defaultPreset;
-}
-if (empty($presets)) {
-    $presets = ['minimal', 'corporate'];
-}
-if (!in_array($defaultPreset, $presets, true)) {
-    $defaultPreset = $presets[0];
-}
+// installed at web/themes/contrib/dq_starterkit.
+[$presets, $defaultPreset] = PresetDiscovery::discover($projectRoot . '/web/themes/contrib/dq_starterkit');
 $themePreset = choose('Design preset', $presets, $defaultPreset);
+
+// Page-shell layout — baked into the generated theme by dq:scaffold; the
+// shell (templates/includes/page-shell.html.twig) is the user's to edit after.
+echo "\nPage layout:\n";
+echo "  sidebar — site title above a vertical menu in a left column\n";
+echo "  single  — one column, title + horizontal menu along the top\n";
+$themeLayout = choose('Page layout', ['sidebar', 'single'], 'sidebar');
 
 // Recipes
 // core/recipes/standard is always seeded as the base recipe — it installs the
@@ -150,7 +149,8 @@ $registry     = file_exists($registryFile)
     ? json_decode(file_get_contents($registryFile), true)
     : [];
 
-$recipeLines = ['  - "core/recipes/standard"'];
+$recipeLines  = ['  - "core/recipes/standard"'];
+$chosenBlocks = [];
 
 if (!empty($registry)) {
     $options = [];
@@ -158,12 +158,66 @@ if (!empty($registry)) {
         $options[] = ['key' => $key, 'label' => $info['label'] ?? $key];
     }
     $chosen = chooseMany('Which drupalquick recipes would you like to include?', $options);
+
     foreach ($chosen as $key) {
-        $recipeLines[] = "  - \"{$key}\"";
+        $info = $registry[$key] ?? [];
+
+        // Per-recipe options — summarised into the registry from each recipe's
+        // own recipe.yml input block. Enter keeps the default; the options form
+        // is only written when a value actually differs, so the generated file
+        // stays as small as the choices made.
+        $optLines = [];
+        foreach (($info['options'] ?? []) as $name => $def) {
+            $desc       = $def['description'] !== '' ? $def['description'] : $name;
+            $default    = $def['default'] ?? null;
+            $defaultStr = is_scalar($default) ? (string) $default : '';
+            $answer     = ask("  {$key} · {$name} — {$desc}", $defaultStr);
+            if ($answer !== '' && $answer !== $defaultStr) {
+                $bare       = in_array($def['type'] ?? '', ['integer', 'float', 'boolean'], true) || is_numeric($answer);
+                $optLines[] = '      ' . $name . ': ' . ($bare ? $answer : "\"{$answer}\"");
+            }
+        }
+
+        if ($optLines) {
+            $recipeLines[] = "  - name: \"{$key}\"";
+            $recipeLines[] = '    options:';
+            array_push($recipeLines, ...$optLines);
+        } else {
+            $recipeLines[] = "  - \"{$key}\"";
+        }
+
+        // Collect the blocks this recipe advertises for homepage composition.
+        foreach (($info['blocks'] ?? []) as $blockKey => $blockInfo) {
+            $ref = "{$key}/{$blockKey}";
+            $chosenBlocks[$ref] = ($blockInfo['label'] ?? $ref) . " ({$ref})";
+        }
     }
 }
 
 $recipesBlock = implode("\n", $recipeLines);
+
+// Homepage composition — offer the chosen recipes' advertised blocks. Skipping
+// keeps whatever front page the recipes set (e.g. the blog's /writing); picking
+// blocks makes dq:scaffold compose the front page from them, in this order, at
+// the dedicated /home view.
+$homepageBlock = '';
+if (!empty($chosenBlocks)) {
+    $blockOptions = [];
+    foreach ($chosenBlocks as $ref => $label) {
+        $blockOptions[] = ['key' => $ref, 'label' => $label];
+    }
+    $picked = chooseMany(
+        'Compose the homepage from recipe blocks? Pick in display order (Enter keeps the recipes\' own front page)',
+        $blockOptions
+    );
+    if (!empty($picked)) {
+        $lines = ['homepage:', '  blocks:'];
+        foreach ($picked as $ref) {
+            $lines[] = "    - \"{$ref}\"";
+        }
+        $homepageBlock = "\n" . implode("\n", $lines) . "\n";
+    }
+}
 
 // Only write admin_pass when the user supplied one — otherwise leave it out so
 // dq:scaffold generates a strong password and shows it once, keeping a secret
@@ -180,10 +234,11 @@ theme:
   machine_name: "{$themeMachine}"
   title: "{$themeTitle}"
   preset: "{$themePreset}"
+  layout: "{$themeLayout}"
 
 recipes:
 {$recipesBlock}
-
+{$homepageBlock}
 parameters:
   theme_design:
     primary_color: "#10b981"

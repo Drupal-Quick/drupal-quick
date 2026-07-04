@@ -98,18 +98,55 @@ variables your submodule sets. `dq:scaffold` replaces the literal token
 `STARTERKIT` with the theme machine name in contents/filenames — only needed if a
 template must name the theme (rare).
 
+**Type/spacing MUST use the preset contract utilities** — `text-title`,
+`text-meta`, `gap-flow`, `py-flow`, `py-row` (plus the color utilities
+`text-ink`/`text-muted`/`bg-rule`/…) — never raw `text-sm`/`gap-6`. That is how
+every preset's scale and negative space reach your markup. See
+`docs/presets.md` § "The content-scale contract".
+
+## User-tunable options (recipe inputs)
+
+Declare options as native recipe inputs in `recipe.yml` — typed, described,
+**always defaulted** (the recipe must work untouched):
+
+```yaml
+input:
+  items_per_page:
+    data_type: integer
+    description: 'How many articles the writing view lists per page.'
+    default: { source: value, value: 30 }
+```
+
+Consume them in config actions as `'${items_per_page}'` (substitution is a
+string replace — values arrive as strings). Users set them in config.dq.yml
+(`- name: blog` / `options: {…}`); `dq:scaffold` passes them as
+`--input=<recipe-dir>.<name>=<value>`. Inputs can only *parameterize* action
+values, not skip actions — conditional behaviour belongs in the scaffold.
+Avoid boolean inputs (CLI 'false' is truthy in PHP); prefer enumerated strings.
+
 ## Catalog metadata (self-describing)
 
 The recipe declares its own catalog entry in **`composer.json`** — the package is
-the single source of truth for its key and label:
+the single source of truth for its key, label, and **placeable blocks** (offered
+for config.dq.yml `homepage.blocks` composition):
 
 ```json
 {
   "name": "drupal-quick/recipe-blog",
   "type": "drupal-recipe",
-  "extra": { "dq": { "recipe": { "key": "blog", "label": "Blog — …" } } }
+  "extra": { "dq": { "recipe": {
+    "key": "blog",
+    "label": "Blog — …",
+    "blocks": { "recent": { "plugin": "views_block:writing-block_1", "label": "Recent writing" } }
+  } } }
 }
 ```
+
+Users reference blocks as `"<key>/<block-key>"` (e.g. `blog/recent`); the plugin
+id for a views block is `views_block:<view_id>-<display_id>`. The registry
+builder also summarises the recipe.yml `input:` block into the registry
+(`options`), so the dq-init wizard can surface options before the package is
+fetched — recipe.yml stays the single source of truth.
 
 Do **not** hand-edit `templates/recipe-registry.json` — it is a generated cache.
 Run `php bin/dq-registry-build` (or let Quick CI run it) to enumerate the
@@ -126,6 +163,11 @@ by referencing it inline in `config.dq.yml` (`{ package, url }`).
       `#[Hook]` methods register under the base hook with a bundle/view-id guard.
 - [ ] `recipe.yml` `install:` lists the submodule so it gets enabled.
 - [ ] Templates are in `theme-assets/`; any theme-name token uses `STARTERKIT`.
-- [ ] `composer.json` declares `extra.dq.recipe` (`key` + `label`); regenerate
-      the cache with `php bin/dq-registry-build` (never hand-edit it).
+- [ ] Templates use only preset-contract utilities for type scale and spacing
+      (`text-title`, `text-meta`, `gap-flow`, `py-row`) — no raw `text-sm`/`gap-6`.
+- [ ] Any user-tunable option is a `recipe.yml` input with a default; actions
+      consume it as `'${name}'`.
+- [ ] `composer.json` declares `extra.dq.recipe` (`key` + `label` + any
+      `blocks`); regenerate the cache with `php bin/dq-registry-build` (never
+      hand-edit it).
 - [ ] Applying it on a fresh scaffold creates the fields and renders correctly.

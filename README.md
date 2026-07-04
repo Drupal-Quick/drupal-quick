@@ -67,11 +67,18 @@ theme:
   machine_name: "my_theme"
   title: "My Theme"
   preset: "minimal"      # a design preset from the starterkit (presets/)
+  layout: "sidebar"      # page shell baked at scaffold: sidebar | single
   build: true            # false to skip the npm build
 
 recipes:
   - "core/recipes/standard"
-  - "blog"               # short key from the recipe registry
+  - name: "blog"         # short key from the recipe registry
+    options:             # optional — the recipe's own inputs (defaults apply)
+      items_per_page: 10
+
+# homepage:              # optional — compose the front page from recipe blocks
+#   blocks:
+#     - "blog/recent"
 
 parameters:
   theme_design:
@@ -92,8 +99,9 @@ static:                  # optional, used by `drush dq:static`
 ## What you get
 
 - A custom theme at `web/themes/custom/{machine_name}/`, generated from `dq_starterkit` and built with Vite + Tailwind CSS v4.
-- Your chosen design **preset** (colors, type, optional fonts) plus `theme_design` overrides applied to the theme — swap it anytime with `npm run preset <name>`.
-- Recipe templates merged into the theme and recipe behaviour assembled as native OOP-hook submodules; all recipes applied in order against a minimal install.
+- Your chosen design **preset** (colors, type, optional fonts) plus `theme_design` overrides applied to the theme — swap it anytime with `npm run preset <name>` — and your chosen page **layout** (`sidebar` | `single`), baked into the theme's shell template (`templates/includes/page-shell.html.twig`), which is yours to edit from then on.
+- Recipe templates merged into the theme and recipe behaviour assembled as native OOP-hook submodules; all recipes applied in order against a minimal install, each with its `options:` passed as native recipe inputs.
+- Optionally a **composed homepage**: recipe-advertised blocks placed in your order on a dedicated `/home` front page — ordinary block config you can rearrange later.
 - Module-free [Schema.org JSON-LD](docs/structured-data.md) on content pages (`BlogPosting` for articles, `WebPage` for pages), built from each node's own fields.
 
 ---
@@ -107,6 +115,17 @@ static:                  # optional, used by `drush dq:static`
 ## Requirements
 
 PHP 8.1+ · Drupal 11.1.8+ (recipe modules use module preprocess OOP hooks) · Drush 12.5+ · Node.js/npm (for the theme build)
+
+---
+
+## Tests
+
+Unit tests cover the pure logic in `src/` (config normalization, option injection, preset discovery, registry building) — no Drupal site required:
+
+```bash
+composer install
+composer test
+```
 
 ---
 

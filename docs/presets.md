@@ -91,6 +91,34 @@ chosen preset  ←  presets/overrides.css (theme_design from config.dq.yml)
 `overrides.css` persists, so it survives re-skinning: `npm run preset corporate`
 keeps the user's `theme_design` tweaks on top of the new preset.
 
+## The content-scale contract
+
+Recipes ship their own templates, yet a preset's type scale and negative space
+must reach them — an airy preset must make *article titles and project titles
+alike* larger and looser without either recipe knowing which preset runs. The
+mechanism is a small **contract vocabulary** on top of the color/font tokens:
+
+| Token | Utility | Meaning |
+| --- | --- | --- |
+| `--text-title` (+ `--line-height`) | `text-title` | content-item titles in listings |
+| `--text-meta` (+ `--line-height`) | `text-meta` | dates, captions, keyword lists |
+| `--spacing-flow` | `gap-flow`, `py-flow`, … | space between content units |
+| `--spacing-row` | `py-row` | vertical rhythm of a list row |
+
+Two rules make it work:
+
+- **Preset authors:** every preset MUST define the full contract (it is part of
+  "a preset is a complete token set"). Differentiate through it — `geometric`
+  ships larger `--text-title` and a wider `--spacing-flow`.
+- **Recipe authors:** templates MUST use the contract utilities for type scale
+  and inter-unit spacing — never raw `text-sm` / `gap-6`. Colors already flow
+  through `text-ink` / `text-muted` / `bg-rule` etc. Anything hardcoded is
+  invisible to presets.
+
+`theme_design` can override contract tokens too: a key like `text_title` maps
+to `--text-title` via the generic kebab rule, so
+`theme_design: { text_title: "1.25rem" }` works with no special casing.
+
 ## Assets (self-hosted fonts, on demand)
 
 The directory form lets a preset self-host webfonts **without committing any

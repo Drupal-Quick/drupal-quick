@@ -2,11 +2,30 @@
     "blog": {
         "label": "Blog — Keywords taxonomy + entity reference field on Article",
         "package": "drupal-quick/recipe-blog",
-        "url": "https://github.com/Drupal-Quick/recipe-blog"
+        "url": "https://github.com/Drupal-Quick/recipe-blog",
+        "blocks": {
+            "recent": {
+                "plugin": "views_block:writing-block_1",
+                "label": "Recent writing"
+            }
+        },
+        "options": {
+            "items_per_page": {
+                "type": "integer",
+                "description": "How many articles the writing view lists per page.",
+                "default": 30
+            }
+        }
     },
     "project": {
         "label": "Project — content type (page + link + thumbnail) and a projects grid view",
         "package": "drupal-quick/recipe-project",
-        "url": "https://github.com/Drupal-Quick/recipe-project"
+        "url": "https://github.com/Drupal-Quick/recipe-project",
+        "blocks": {
+            "grid": {
+                "plugin": "views_block:projects-block_1",
+                "label": "Projects grid"
+            }
+        }
     }
 }

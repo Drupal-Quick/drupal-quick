@@ -4,6 +4,8 @@ namespace DrupalQuick\Drush\Commands;
 
 use Drupal\Component\Serialization\Json;
 use Drupal\Component\Serialization\Yaml;
+use DrupalQuick\Config\PresetDiscovery;
+use DrupalQuick\Config\RecipeEntry;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -75,7 +77,7 @@ final class ScaffoldCommand extends Command {
       // Discover presets from the installed starterkit (package.json "dq"),
       // falling back to scanning its presets/ directory.
       $starterkitDir    = $this->drupalRoot() . '/themes/contrib/dq_starterkit';
-      [$availablePresets, $defaultPreset] = $this->discoverPresets($starterkitDir);
+      [$availablePresets, $defaultPreset] = PresetDiscovery::discover($starterkitDir);
 
       $config['theme']['preset'] = $this->io->choice(
         'Which design preset would you like to apply?',
@@ -116,6 +118,7 @@ final class ScaffoldCommand extends Command {
     $themeName   = $config['theme']['machine_name'] ?? NULL;
     $themeTitle  = $config['theme']['title'] ?? 'Custom Theme';
     $themePreset = $config['theme']['preset'] ?? NULL;
+    $themeLayout = $config['theme']['layout'] ?? NULL;
     $themeBuild  = $config['theme']['build'] ?? TRUE;
     $recipes     = $config['recipes'] ?? [];
     $parameters  = $config['parameters'] ?? [];
@@ -176,6 +179,29 @@ final class ScaffoldCommand extends Command {
       // is set after recipes (step 3.5) so recipe-set defaults do not clobber it.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
 
+      // Bake the chosen page-shell arrangement. Layout is a scaffold-time
+      // choice, not a runtime setting: the starterkit ships the default shell
+      // (templates/includes/page-shell.html.twig — the sidebar arrangement,
+      // embedded by both page templates) plus one file per alternative
+      // (page-shell--<layout>.html.twig). The chosen variant replaces the
+      // shell, the unchosen ones are removed, and from then on the shell is
+      // ordinary Twig the user edits directly. Runs before the theme build, so
+      // only the chosen arrangement's classes are compiled.
+      $shellDir = "{$themeDir}/templates/includes";
+      if ($themeLayout && $themeLayout !== 'sidebar') {
+        $variant = "{$shellDir}/page-shell--{$themeLayout}.html.twig";
+        if (file_exists($variant)) {
+          $this->io->writeln("🧭 Baking the '{$themeLayout}' page shell...");
+          copy($variant, "{$shellDir}/page-shell.html.twig");
+        }
+        else {
+          $this->io->warning("Unknown layout '{$themeLayout}' — no page-shell--{$themeLayout}.html.twig in the starterkit. Keeping the default shell.");
+        }
+      }
+      foreach (glob("{$shellDir}/page-shell--*.html.twig") ?: [] as $variantFile) {
+        unlink($variantFile);
+      }
+
       // Token application is deferred to the preset step (`npm run preset` in
       // step 5) — the single source of truth, which also serves re-skinning
       // after scaffold. Here we only translate config.dq.yml's theme_design into
@@ -210,8 +236,9 @@ final class ScaffoldCommand extends Command {
       $umbrellaDir = $this->ensureUmbrellaModule();
       $assembled = [];
       foreach ($recipes as $recipe) {
-        $path = $this->resolvePath($recipe, $registry);
-        if ($path !== $recipe && ($name = $this->assembleRecipeModule($path, $umbrellaDir))) {
+        [$ref] = RecipeEntry::normalize($recipe);
+        $path = $this->resolvePath($ref, $registry);
+        if ($path !== $ref && ($name = $this->assembleRecipeModule($path, $umbrellaDir))) {
           $assembled[] = $name;
         }
       }
@@ -227,15 +254,32 @@ final class ScaffoldCommand extends Command {
     if (!empty($recipes)) {
       $this->io->writeln('📦 Applying Drupal recipes...');
       foreach ($recipes as $recipe) {
-        $path = $this->resolvePath($recipe, $registry);
+        [$ref, $options] = RecipeEntry::normalize($recipe);
+        $path = $this->resolvePath($ref, $registry);
         // Managed recipes (a registry key or inline spec) resolve to a recipes/
         // path; core/contrib path strings pass through unchanged.
-        $managed = ($path !== $recipe);
+        $managed = ($path !== $ref);
         if ($managed) {
-          $label = is_array($recipe) ? ($recipe['package'] ?? 'recipe') : $recipe;
+          $label = is_array($ref) ? ($ref['package'] ?? 'recipe') : $ref;
           $this->io->writeln("   Resolved '{$label}' → {$path}");
         }
-        Drush::drush(Drush::aliasManager()->getSelf(), 'recipe', [$path], ['yes' => TRUE])->mustRun();
+
+        // The entry's options map to native recipe inputs: each becomes
+        // --input=<recipe-dir>.<name>=<value> (core prefixes input names with
+        // the recipe directory's basename). Passed as extra args because the
+        // site-process option serializer can't repeat an option; Symfony
+        // parses them as options regardless of position. Unset options fall
+        // back to the recipe.yml input defaults.
+        $args = [$path];
+        foreach ($options as $key => $value) {
+          if (!is_scalar($value)) {
+            $this->io->warning("Skipping non-scalar option '{$key}' for recipe '{$path}'.");
+            continue;
+          }
+          $value  = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+          $args[] = '--input=' . basename($path) . ".{$key}={$value}";
+        }
+        Drush::drush(Drush::aliasManager()->getSelf(), 'recipe', $args, ['yes' => TRUE])->mustRun();
 
         // Inject theme assets when the recipe ships a theme-assets/ directory
         // (copyThemeAssets no-ops when it doesn't — no registry flag needed).
@@ -249,6 +293,109 @@ final class ScaffoldCommand extends Command {
     if ($themeName) {
       $this->io->writeln("🎨 Setting '{$themeName}' as the default theme...");
       Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ['system.theme', 'default', $themeName], ['yes' => TRUE])->mustRun();
+    }
+
+    // 3.7. Compose the homepage from recipe-advertised blocks. Each
+    // homepage.blocks entry is "<recipe-key>/<block-key>", resolved through the
+    // registry's blocks metadata (recipes advertise placeable blocks in their
+    // composer.json extra.dq.recipe.blocks — capabilities ship with the recipe;
+    // *placement* is selected here). Blocks land in the theme's content region,
+    // restricted to <front>, ordered by the list. The result is ordinary block
+    // config — rearrange or remove later at /admin/structure/block. When
+    // homepage.blocks is absent, whatever front page the recipes set (e.g. the
+    // blog's /writing) stands.
+    $homepageBlocks = $config['homepage']['blocks'] ?? [];
+    if ($themeName && $homepageBlocks) {
+      $this->io->writeln('🏠 Composing the homepage from recipe blocks...');
+      // Block placement needs the block module (standard ships it; minimal
+      // alone does not). pm:install is a no-op when it is already enabled.
+      Drush::drush(Drush::aliasManager()->getSelf(), 'pm:install', ['block'], ['yes' => TRUE])->mustRun();
+
+      $weight = -10;
+      foreach ($homepageBlocks as $entry) {
+        [$recipeKey, $blockKey] = array_pad(explode('/', (string) $entry, 2), 2, '');
+        $blockMeta = $registry[$recipeKey]['blocks'][$blockKey] ?? NULL;
+        if (!$blockMeta || empty($blockMeta['plugin'])) {
+          $this->io->warning("Unknown homepage block '{$entry}' — recipe '{$recipeKey}' does not advertise '{$blockKey}'. Skipped.");
+          continue;
+        }
+        $values = [
+          'id'         => preg_replace('/[^a-z0-9_]+/', '_', strtolower("{$themeName}_dq_{$recipeKey}_{$blockKey}")),
+          'theme'      => $themeName,
+          'region'     => 'content',
+          'plugin'     => $blockMeta['plugin'],
+          'weight'     => $weight++,
+          'settings'   => [
+            'label'         => (string) ($blockMeta['label'] ?? $entry),
+            'label_display' => '0',
+          ],
+          'visibility' => [
+            'request_path' => [
+              'id'     => 'request_path',
+              'negate' => FALSE,
+              'pages'  => '<front>',
+            ],
+          ],
+        ];
+        // Created via php:eval — block config entities cannot be built with
+        // plain config:set, and the scaffold already shells out per step.
+        $code = sprintf('\Drupal\block\Entity\Block::create(%s)->save();', var_export($values, TRUE));
+        Drush::drush(Drush::aliasManager()->getSelf(), 'php:eval', [$code])->mustRun();
+        $this->io->writeln("   Placed {$entry} → {$values['id']}");
+      }
+
+      // The composed homepage lives at /home — a dedicated, always-empty view
+      // page created for the purpose (the chosen blocks render there via
+      // <front> visibility). A view rather than a custom route keeps this
+      // config-only: after scaffold the admin can repoint system.site
+      // page.front, or edit/delete the view like any other. Its bundle filter
+      // matches nothing, so the view contributes no rows of its own.
+      Drush::drush(Drush::aliasManager()->getSelf(), 'pm:install', ['views'], ['yes' => TRUE])->mustRun();
+      $home = <<<'PHP'
+if (!\Drupal\views\Entity\View::load('dq_home')) {
+  \Drupal\views\Entity\View::create([
+    'id' => 'dq_home',
+    'label' => 'Home',
+    'description' => 'Empty page at /home hosting the composed homepage blocks (created by dq:scaffold).',
+    'base_table' => 'node_field_data',
+    'base_field' => 'nid',
+    'display' => [
+      'default' => [
+        'id' => 'default',
+        'display_plugin' => 'default',
+        'display_title' => 'Default',
+        'position' => 0,
+        'display_options' => [
+          'access' => ['type' => 'perm', 'options' => ['perm' => 'access content']],
+          'cache' => ['type' => 'tag', 'options' => []],
+          'pager' => ['type' => 'none', 'options' => ['offset' => 0]],
+          'filters' => [
+            'type' => [
+              'id' => 'type', 'table' => 'node_field_data', 'field' => 'type',
+              'entity_type' => 'node', 'entity_field' => 'type', 'plugin_id' => 'bundle',
+              'value' => ['dq_home_none' => 'dq_home_none'],
+            ],
+          ],
+          'title' => '',
+        ],
+      ],
+      'page_1' => [
+        'id' => 'page_1',
+        'display_plugin' => 'page',
+        'display_title' => 'Page',
+        'position' => 1,
+        'display_options' => ['path' => 'home'],
+      ],
+    ],
+  ])->save();
+}
+PHP;
+      Drush::drush(Drush::aliasManager()->getSelf(), 'php:eval', [$home])->mustRun();
+      Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ['system.site', 'page.front', '/home'], ['yes' => TRUE])->mustRun();
+      // Router rebuild so the new /home path routes (the scaffold's final
+      // cache rebuild would also cover it, but blocks placed above should be
+      // verifiable immediately).
+      Drush::drush(Drush::aliasManager()->getSelf(), 'cache:rebuild')->mustRun();
     }
 
     // 4. Post-recipe config overrides.
@@ -344,7 +491,7 @@ final class ScaffoldCommand extends Command {
    * (recipes/<package-short-name>); core/contrib path strings pass through.
    */
   private function resolvePath($recipe, array $registry): string {
-    $package = $this->recipePackage($recipe, $registry);
+    $package = RecipeEntry::packageFor($recipe, $registry);
     if ($package === NULL) {
       // A core/contrib path string (e.g. core/recipes/standard) — unchanged.
       return $recipe;
@@ -352,18 +499,6 @@ final class ScaffoldCommand extends Command {
     $short = ($pos = strpos($package, '/')) !== FALSE ? substr($package, $pos + 1) : $package;
     // getcwd() is the project root (where config.dq.yml lives).
     return getcwd() . '/recipes/' . $short;
-  }
-
-  /**
-   * Returns the Composer package name for a recipe entry, or NULL for a
-   * core/contrib path. Accepts a registry key (string) or an inline spec
-   * (['package' => …, 'url' => …]).
-   */
-  private function recipePackage($recipe, array $registry): ?string {
-    if (is_array($recipe)) {
-      return $recipe['package'] ?? NULL;
-    }
-    return $registry[$recipe]['package'] ?? NULL;
   }
 
   /**
@@ -496,35 +631,6 @@ final class ScaffoldCommand extends Command {
       $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
     }
     rmdir($dir);
-  }
-
-  /**
-   * Discovers presets from the installed starterkit's package.json "dq".
-   *
-   * The "dq" block (presets + defaultPreset) is the single source of truth and
-   * travels intact through generate-theme, so there is no need to scan presets/;
-   * a hardcoded set is the last resort if the manifest can't be read. The same
-   * contract is read by bin/dq-init and scripts/preset.mjs — keep them in step.
-   * Returns [string[] $names, string $default].
-   */
-  private function discoverPresets(string $starterkitDir): array {
-    $names   = [];
-    $default = 'minimal';
-
-    $pkg = "{$starterkitDir}/package.json";
-    if (file_exists($pkg)) {
-      $meta    = json_decode(file_get_contents($pkg), TRUE) ?: [];
-      $names   = $meta['dq']['presets'] ?? [];
-      $default = $meta['dq']['defaultPreset'] ?? $default;
-    }
-
-    if (!$names) {
-      $names = ['minimal', 'corporate'];
-    }
-    if (!in_array($default, $names, TRUE)) {
-      $default = $names[0];
-    }
-    return [$names, $default];
   }
 
   /**

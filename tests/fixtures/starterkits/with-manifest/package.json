@@ -1,0 +1,7 @@
+{
+  "name": "dq_starterkit",
+  "dq": {
+    "defaultPreset": "geometric",
+    "presets": ["minimal", "corporate", "geometric"]
+  }
+}

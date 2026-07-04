@@ -13,6 +13,12 @@ theme:
   # Available out of the box: minimal, corporate. Omit to use the starterkit's
   # default. Change it later with `npm run preset <name>` inside the theme.
   preset: "minimal"
+  # Page-shell arrangement, baked into the theme at scaffold time: "sidebar"
+  # (site title atop a vertical left menu — the default) or "single" (one
+  # column, title + horizontal menu along the top). Afterwards the shell is an
+  # ordinary template you own — edit templates/includes/page-shell.html.twig
+  # in the generated theme to change or restyle the layout.
+  layout: "sidebar"
   # Set to false to skip `npm install && npm run build` after theme generation.
   # Useful when deferring the build to a CI step or building manually later.
   build: true
@@ -20,13 +26,31 @@ theme:
 # Each recipe entry can be:
 #   - a short key from the registry (templates/recipe-registry.json), e.g. "blog"
 #   - a core/contrib path, e.g. "core/recipes/standard"
+#   - a key plus per-recipe options (the recipe's native inputs — all optional,
+#     with sane defaults):
+#       - name: "blog"
+#         options:
+#           items_per_page: 10
 #   - an inline package spec for an ad-hoc recipe (no registry edit needed):
 #       - { package: "you/recipe-x", url: "https://github.com/you/recipe-x" }
 # Run `composer exec dq-install` after editing — it fetches any package recipes
-# (registry keys or inline specs) before `drush dq:scaffold`.
+# (registry keys or inline specs) before `drush dq:scaffold`, and writes each
+# recipe's available options here as a commented block under its entry, ready to
+# uncomment. Pass --exclude-options to just list them in the terminal instead.
 recipes:
   - "core/recipes/standard"
   - "blog"
+
+# Homepage composition (optional). Pick which recipe-advertised blocks make up
+# the front page, in order — each entry is "<recipe-key>/<block-key>" (recipes
+# advertise their placeable blocks; `dq-install` and the registry list them).
+# When set, the front page becomes the composed blocks; when omitted, whatever
+# front page the recipes configure stands (e.g. the blog's /writing). Placed
+# blocks are ordinary block config — edit later at /admin/structure/block.
+# homepage:
+#   blocks:
+#     - "blog/recent"
+#     - "project/grid"
 
 parameters:
   # Override the chosen preset's design tokens. Persisted to presets/overrides.css

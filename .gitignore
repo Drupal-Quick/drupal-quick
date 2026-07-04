@@ -3,3 +3,8 @@
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# Dev dependencies (unit tests) — resolved fresh; not shipped
+/vendor/
+composer.lock
+.phpunit.cache/
