@@ -33,6 +33,12 @@ $destination = $projectRoot . '/config.dq.yml';
 $interactive = in_array('--interactive', $argv, true);
 $ddev        = in_array('--ddev', $argv, true);
 
+// Preset discovery is a plain class in this package — required directly, so
+// the script keeps working without any Composer autoloader.
+require_once $packageRoot . '/src/Config/PresetDiscovery.php';
+
+use DrupalQuick\Config\PresetDiscovery;
+
 // ------------------------------------------------------------------ Helpers
 
 function ask(string $question, string $default = ''): string {
@@ -121,22 +127,8 @@ $themeTitle   = ask('Theme display name', 'My Theme');
 // Discover presets from the installed starterkit's package.json "dq" metadata
 // (presets + defaultPreset) — the single source of truth, which travels intact
 // through generate-theme. The starterkit ships as drupal-quick/dq_starterkit,
-// installed at web/themes/contrib/dq_starterkit; a hardcoded set is the last
-// resort if that manifest can't be read.
-$starterkitDir = $projectRoot . '/web/themes/contrib/dq_starterkit';
-$presets       = [];
-$defaultPreset = 'minimal';
-if (file_exists($starterkitDir . '/package.json')) {
-    $meta          = json_decode(file_get_contents($starterkitDir . '/package.json'), true) ?: [];
-    $presets       = $meta['dq']['presets'] ?? [];
-    $defaultPreset = $meta['dq']['defaultPreset'] ?? $defaultPreset;
-}
-if (empty($presets)) {
-    $presets = ['minimal', 'corporate'];
-}
-if (!in_array($defaultPreset, $presets, true)) {
-    $defaultPreset = $presets[0];
-}
+// installed at web/themes/contrib/dq_starterkit.
+[$presets, $defaultPreset] = PresetDiscovery::discover($projectRoot . '/web/themes/contrib/dq_starterkit');
 $themePreset = choose('Design preset', $presets, $defaultPreset);
 
 // Page-shell layout — baked into the generated theme by dq:scaffold; the

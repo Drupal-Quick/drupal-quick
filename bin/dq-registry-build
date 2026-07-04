@@ -35,6 +35,12 @@
 
 $packageRoot = dirname(__DIR__);
 
+// Entry building is a plain class in this package — required directly, so the
+// script stays standalone (no Composer autoloader needed).
+require_once $packageRoot . '/src/Registry/RegistryEntry.php';
+
+use DrupalQuick\Registry\RegistryEntry;
+
 // ------------------------------------------------------------------ Arguments
 
 $opts = [
@@ -137,86 +143,32 @@ function parse_yaml(string $text): ?array {
 }
 
 /**
- * Extracts the wizard-facing options summary from parsed recipe.yml data.
+ * Parses a recipe.yml text, warning once when no YAML backend is available.
  *
- * Maps the recipe's native `input:` definitions to
- * { name: { type, description, default } } so consumers that run before the
- * package is fetched (dq-init --interactive, the future config generator) can
- * present them. recipe.yml stays the single source of truth.
+ * Options are then omitted from the affected entries rather than failing the
+ * whole build.
  */
-function options_from_recipe(?array $recipeData): array {
-  $options = [];
-  foreach (($recipeData['input'] ?? []) as $name => $definition) {
-    if (!is_array($definition)) {
-      continue;
+function parse_recipe_yaml(?string $text): ?array {
+  if ($text === null) {
+    return null;
+  }
+  $data = parse_yaml($text);
+  if ($data === null) {
+    static $warned = false;
+    if (!$warned) {
+      fwrite(STDERR, "⚠️  No YAML backend (yaml ext or Symfony Yaml) — recipe options will be omitted from the registry.\n");
+      $warned = true;
     }
-    $options[$name] = [
-      'type'        => (string) ($definition['data_type'] ?? 'string'),
-      'description' => (string) ($definition['description'] ?? ''),
-      'default'     => $definition['default']['value'] ?? null,
-    ];
   }
-  return $options;
-}
-
-/**
- * Normalises a git remote URL to an https web URL without the .git suffix.
- */
-function normalize_git_url(string $url): string {
-  $url = trim($url);
-  // git@github.com:Org/repo.git → https://github.com/Org/repo
-  if (preg_match('#^git@([^:]+):(.+?)(?:\.git)?$#', $url, $m)) {
-    return "https://{$m[1]}/{$m[2]}";
-  }
-  return preg_replace('#\.git$#', '', $url);
+  return $data;
 }
 
 /**
  * Builds a registry entry from a decoded composer.json, or NULL if the package
  * is not a recipe that opts into the catalog.
  */
-function entry_from_composer(?array $composer, string $url, ?string $recipeYaml = null): ?array {
-  if (!$composer || ($composer['type'] ?? '') !== 'drupal-recipe') {
-    return null;
-  }
-  $meta = $composer['extra']['dq']['recipe'] ?? null;
-  if (!is_array($meta) || empty($meta['key'])) {
-    return null;
-  }
-  $entry = [
-    'label'   => (string) ($meta['label'] ?? $meta['key']),
-    'package' => (string) ($composer['name'] ?? ''),
-    'url'     => $url,
-  ];
-  // Placeable blocks the recipe advertises for homepage composition
-  // (config.dq.yml homepage.blocks entries "<recipe-key>/<block-key>").
-  // Carried verbatim: { <block-key>: { plugin, label } }.
-  if (!empty($meta['blocks']) && is_array($meta['blocks'])) {
-    $entry['blocks'] = $meta['blocks'];
-  }
-  // User-tunable options, summarised from the recipe's own recipe.yml input
-  // block — lets pre-fetch consumers (dq-init --interactive) surface them.
-  if ($recipeYaml !== null) {
-    $parsed = parse_yaml($recipeYaml);
-    if ($parsed === null) {
-      static $warned = false;
-      if (!$warned) {
-        fwrite(STDERR, "⚠️  No YAML backend (yaml ext or Symfony Yaml) — recipe options will be omitted from the registry.\n");
-        $warned = true;
-      }
-    }
-    else {
-      $options = options_from_recipe($parsed);
-      if ($options) {
-        $entry['options'] = $options;
-      }
-    }
-  }
-  return [
-    'key'   => (string) $meta['key'],
-    'entry' => $entry,
-  ];
-}
+// Entry building itself lives in DrupalQuick\Registry\RegistryEntry (required
+// above) so it is unit-testable; see tests/Unit/Registry/RegistryEntryTest.php.
 
 // ------------------------------------------------------------------ Collect
 
@@ -250,7 +202,7 @@ foreach ($opts['paths'] as $path) {
   $remote = @shell_exec('git -C ' . escapeshellarg($path) . ' remote get-url origin 2>/dev/null') ?: '';
   $recipeFile = rtrim($path, '/') . '/recipe.yml';
   $recipeYaml = is_file($recipeFile) ? file_get_contents($recipeFile) : null;
-  $add(entry_from_composer($composer, normalize_git_url($remote), $recipeYaml), $path);
+  $add(RegistryEntry::fromComposer($composer, RegistryEntry::normalizeGitUrl($remote), parse_recipe_yaml($recipeYaml)), $path);
 }
 
 // 2. GitHub org enumeration.
@@ -282,7 +234,7 @@ if ($opts['org'] !== '') {
       if (($composer['type'] ?? '') === 'drupal-recipe') {
         [$recipeYaml] = http_get("https://raw.githubusercontent.com/{$full}/{$branch}/recipe.yml", $opts['token']);
       }
-      $add(entry_from_composer($composer, $repo['html_url'] ?? '', $recipeYaml), $full);
+      $add(RegistryEntry::fromComposer($composer, $repo['html_url'] ?? '', parse_recipe_yaml($recipeYaml)), $full);
     }
     $page++;
   } while (count($repos) === 100);

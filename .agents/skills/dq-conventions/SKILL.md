@@ -154,5 +154,11 @@ This repo is **orchestrator-only**; the theme and recipes are separate packages.
   `CleanupCommand`, `StaticExportCommand`, `DeployCommand`; `DrupalQuickHelpers`
   trait). Standalone CLI scripts in `bin/` (`dq-init`, `dq-install`,
   `dq-registry-build`).
+- **Pure logic lives in plain classes, not in the bins.** `src/Config/`
+  (`RecipeEntry`, `RecipeOptions`, `PresetDiscovery`) and `src/Registry/`
+  (`RegistryEntry`) hold the fiddly deterministic pieces; the bin scripts
+  `require_once` them directly (no autoloader assumption) and stay thin.
+  Unit-test any new logic of this kind in `tests/Unit/` — run with
+  `composer test` (no Drupal needed; CI runs it on every push).
 - Config/registry: `templates/config.dq.yml`, `templates/recipe-registry.json`.
 - Design notes: `docs/extensibility.md`, `docs/static-deploy.md`, `docs/structured-data.md`.

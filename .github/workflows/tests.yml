@@ -1,0 +1,25 @@
+# Unit tests for the pure logic in src/ (config normalization, option
+# injection, preset discovery, registry entry building). No Drupal site is
+# involved — see phpunit.xml / tests/Unit.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  phpunit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Run the unit suite
+        run: composer test

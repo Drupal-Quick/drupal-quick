@@ -118,6 +118,17 @@ PHP 8.1+ · Drupal 11.1.8+ (recipe modules use module preprocess OOP hooks) · D
 
 ---
 
+## Tests
+
+Unit tests cover the pure logic in `src/` (config normalization, option injection, preset discovery, registry building) — no Drupal site required:
+
+```bash
+composer install
+composer test
+```
+
+---
+
 ## Roadmap
 
 - **Build out the recipe library** beyond the blog proof of concept.

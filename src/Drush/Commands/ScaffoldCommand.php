@@ -4,6 +4,8 @@ namespace DrupalQuick\Drush\Commands;
 
 use Drupal\Component\Serialization\Json;
 use Drupal\Component\Serialization\Yaml;
+use DrupalQuick\Config\PresetDiscovery;
+use DrupalQuick\Config\RecipeEntry;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -75,7 +77,7 @@ final class ScaffoldCommand extends Command {
       // Discover presets from the installed starterkit (package.json "dq"),
       // falling back to scanning its presets/ directory.
       $starterkitDir    = $this->drupalRoot() . '/themes/contrib/dq_starterkit';
-      [$availablePresets, $defaultPreset] = $this->discoverPresets($starterkitDir);
+      [$availablePresets, $defaultPreset] = PresetDiscovery::discover($starterkitDir);
 
       $config['theme']['preset'] = $this->io->choice(
         'Which design preset would you like to apply?',
@@ -234,7 +236,7 @@ final class ScaffoldCommand extends Command {
       $umbrellaDir = $this->ensureUmbrellaModule();
       $assembled = [];
       foreach ($recipes as $recipe) {
-        [$ref] = $this->normalizeRecipeEntry($recipe);
+        [$ref] = RecipeEntry::normalize($recipe);
         $path = $this->resolvePath($ref, $registry);
         if ($path !== $ref && ($name = $this->assembleRecipeModule($path, $umbrellaDir))) {
           $assembled[] = $name;
@@ -252,7 +254,7 @@ final class ScaffoldCommand extends Command {
     if (!empty($recipes)) {
       $this->io->writeln('📦 Applying Drupal recipes...');
       foreach ($recipes as $recipe) {
-        [$ref, $options] = $this->normalizeRecipeEntry($recipe);
+        [$ref, $options] = RecipeEntry::normalize($recipe);
         $path = $this->resolvePath($ref, $registry);
         // Managed recipes (a registry key or inline spec) resolve to a recipes/
         // path; core/contrib path strings pass through unchanged.
@@ -489,7 +491,7 @@ PHP;
    * (recipes/<package-short-name>); core/contrib path strings pass through.
    */
   private function resolvePath($recipe, array $registry): string {
-    $package = $this->recipePackage($recipe, $registry);
+    $package = RecipeEntry::packageFor($recipe, $registry);
     if ($package === NULL) {
       // A core/contrib path string (e.g. core/recipes/standard) — unchanged.
       return $recipe;
@@ -497,43 +499,6 @@ PHP;
     $short = ($pos = strpos($package, '/')) !== FALSE ? substr($package, $pos + 1) : $package;
     // getcwd() is the project root (where config.dq.yml lives).
     return getcwd() . '/recipes/' . $short;
-  }
-
-  /**
-   * Normalizes a config.dq.yml recipe entry to [reference, options].
-   *
-   * An entry is one of:
-   *   - a string (registry key or core/contrib path);
-   *   - {name: <key-or-path>, options: {...}} — the options form; options map
-   *     to the recipe's native inputs (recipe.yml `input:` declares them, with
-   *     defaults, so options are always optional);
-   *   - {package: ..., url: ..., options?: {...}} — an inline package spec.
-   *
-   * The returned reference is what resolvePath()/recipePackage() accept (the
-   * string, or the inline spec minus options).
-   */
-  private function normalizeRecipeEntry($recipe): array {
-    if (!is_array($recipe)) {
-      return [$recipe, []];
-    }
-    $options = $recipe['options'] ?? [];
-    if (isset($recipe['name'])) {
-      return [$recipe['name'], is_array($options) ? $options : []];
-    }
-    unset($recipe['options']);
-    return [$recipe, is_array($options) ? $options : []];
-  }
-
-  /**
-   * Returns the Composer package name for a recipe entry, or NULL for a
-   * core/contrib path. Accepts a registry key (string) or an inline spec
-   * (['package' => …, 'url' => …]).
-   */
-  private function recipePackage($recipe, array $registry): ?string {
-    if (is_array($recipe)) {
-      return $recipe['package'] ?? NULL;
-    }
-    return $registry[$recipe]['package'] ?? NULL;
   }
 
   /**
@@ -666,35 +631,6 @@ PHP;
       $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
     }
     rmdir($dir);
-  }
-
-  /**
-   * Discovers presets from the installed starterkit's package.json "dq".
-   *
-   * The "dq" block (presets + defaultPreset) is the single source of truth and
-   * travels intact through generate-theme, so there is no need to scan presets/;
-   * a hardcoded set is the last resort if the manifest can't be read. The same
-   * contract is read by bin/dq-init and scripts/preset.mjs — keep them in step.
-   * Returns [string[] $names, string $default].
-   */
-  private function discoverPresets(string $starterkitDir): array {
-    $names   = [];
-    $default = 'minimal';
-
-    $pkg = "{$starterkitDir}/package.json";
-    if (file_exists($pkg)) {
-      $meta    = json_decode(file_get_contents($pkg), TRUE) ?: [];
-      $names   = $meta['dq']['presets'] ?? [];
-      $default = $meta['dq']['defaultPreset'] ?? $default;
-    }
-
-    if (!$names) {
-      $names = ['minimal', 'corporate'];
-    }
-    if (!in_array($default, $names, TRUE)) {
-      $default = $names[0];
-    }
-    return [$names, $default];
   }
 
   /**
