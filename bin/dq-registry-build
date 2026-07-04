@@ -102,6 +102,64 @@ function http_get(string $url, string $token = ''): array {
 }
 
 /**
+ * Parses YAML text via the best available backend, or NULL when none exists.
+ *
+ * The script itself stays dependency-free: it prefers the yaml PECL extension
+ * (enabled in CI via setup-php `extensions: yaml`), falls back to Symfony Yaml
+ * when an autoloader is reachable (cwd or this package), and otherwise returns
+ * NULL — the caller then skips recipe.yml-derived metadata with a warning
+ * rather than failing the whole build.
+ */
+function parse_yaml(string $text): ?array {
+  if (function_exists('yaml_parse')) {
+    $data = @yaml_parse($text);
+    return is_array($data) ? $data : null;
+  }
+  static $autoloaded = false;
+  if (!$autoloaded) {
+    foreach ([getcwd() . '/vendor/autoload.php', dirname(__DIR__) . '/vendor/autoload.php'] as $autoload) {
+      if (is_file($autoload)) {
+        require_once $autoload;
+        break;
+      }
+    }
+    $autoloaded = true;
+  }
+  if (class_exists(\Symfony\Component\Yaml\Yaml::class)) {
+    try {
+      $data = \Symfony\Component\Yaml\Yaml::parse($text);
+      return is_array($data) ? $data : null;
+    } catch (\Throwable) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Extracts the wizard-facing options summary from parsed recipe.yml data.
+ *
+ * Maps the recipe's native `input:` definitions to
+ * { name: { type, description, default } } so consumers that run before the
+ * package is fetched (dq-init --interactive, the future config generator) can
+ * present them. recipe.yml stays the single source of truth.
+ */
+function options_from_recipe(?array $recipeData): array {
+  $options = [];
+  foreach (($recipeData['input'] ?? []) as $name => $definition) {
+    if (!is_array($definition)) {
+      continue;
+    }
+    $options[$name] = [
+      'type'        => (string) ($definition['data_type'] ?? 'string'),
+      'description' => (string) ($definition['description'] ?? ''),
+      'default'     => $definition['default']['value'] ?? null,
+    ];
+  }
+  return $options;
+}
+
+/**
  * Normalises a git remote URL to an https web URL without the .git suffix.
  */
 function normalize_git_url(string $url): string {
@@ -117,7 +175,7 @@ function normalize_git_url(string $url): string {
  * Builds a registry entry from a decoded composer.json, or NULL if the package
  * is not a recipe that opts into the catalog.
  */
-function entry_from_composer(?array $composer, string $url): ?array {
+function entry_from_composer(?array $composer, string $url, ?string $recipeYaml = null): ?array {
   if (!$composer || ($composer['type'] ?? '') !== 'drupal-recipe') {
     return null;
   }
@@ -135,6 +193,24 @@ function entry_from_composer(?array $composer, string $url): ?array {
   // Carried verbatim: { <block-key>: { plugin, label } }.
   if (!empty($meta['blocks']) && is_array($meta['blocks'])) {
     $entry['blocks'] = $meta['blocks'];
+  }
+  // User-tunable options, summarised from the recipe's own recipe.yml input
+  // block — lets pre-fetch consumers (dq-init --interactive) surface them.
+  if ($recipeYaml !== null) {
+    $parsed = parse_yaml($recipeYaml);
+    if ($parsed === null) {
+      static $warned = false;
+      if (!$warned) {
+        fwrite(STDERR, "⚠️  No YAML backend (yaml ext or Symfony Yaml) — recipe options will be omitted from the registry.\n");
+        $warned = true;
+      }
+    }
+    else {
+      $options = options_from_recipe($parsed);
+      if ($options) {
+        $entry['options'] = $options;
+      }
+    }
   }
   return [
     'key'   => (string) $meta['key'],
@@ -172,7 +248,9 @@ foreach ($opts['paths'] as $path) {
   }
   $composer = json_decode(file_get_contents($composerFile), true);
   $remote = @shell_exec('git -C ' . escapeshellarg($path) . ' remote get-url origin 2>/dev/null') ?: '';
-  $add(entry_from_composer($composer, normalize_git_url($remote)), $path);
+  $recipeFile = rtrim($path, '/') . '/recipe.yml';
+  $recipeYaml = is_file($recipeFile) ? file_get_contents($recipeFile) : null;
+  $add(entry_from_composer($composer, normalize_git_url($remote), $recipeYaml), $path);
 }
 
 // 2. GitHub org enumeration.
@@ -199,7 +277,12 @@ if ($opts['org'] !== '') {
         continue;
       }
       $composer = json_decode($cBody, true);
-      $add(entry_from_composer($composer, $repo['html_url'] ?? ''), $full);
+      // Fetch recipe.yml only for actual recipe packages (saves API calls).
+      $recipeYaml = null;
+      if (($composer['type'] ?? '') === 'drupal-recipe') {
+        [$recipeYaml] = http_get("https://raw.githubusercontent.com/{$full}/{$branch}/recipe.yml", $opts['token']);
+      }
+      $add(entry_from_composer($composer, $repo['html_url'] ?? '', $recipeYaml), $full);
     }
     $page++;
   } while (count($repos) === 100);

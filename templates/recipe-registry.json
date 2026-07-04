@@ -8,6 +8,13 @@
                 "plugin": "views_block:writing-block_1",
                 "label": "Recent writing"
             }
+        },
+        "options": {
+            "items_per_page": {
+                "type": "integer",
+                "description": "How many articles the writing view lists per page.",
+                "default": 30
+            }
         }
     },
     "project": {

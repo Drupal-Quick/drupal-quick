@@ -45,15 +45,31 @@ ddev composer exec -- dq-init --interactive
 ddev composer exec -- dq-init --ddev
 ```
 
-Edit `config.dq.yml` to set your site name, theme machine name, preset, and recipes.
+Edit `config.dq.yml` to set your site name, theme machine name, preset, page
+layout (`sidebar` | `single`), and recipes. Everything has a sane default — an
+untouched file scaffolds a complete site.
 
-A recipe entry can be a registry key, a core/contrib path, or an inline package spec for a one-off recipe with no registry edit:
+A recipe entry can be a registry key, a core/contrib path, a key with an
+`options:` map (the recipe's native inputs — `dq-install` lists what each
+fetched recipe supports), or an inline package spec for a one-off recipe:
 
 ```yaml
 recipes:
   - "core/recipes/standard"
-  - "blog"
+  - name: "blog"
+    options:
+      items_per_page: 10
   - { package: "you/recipe-x", url: "https://github.com/you/recipe-x" }
+```
+
+Optionally compose the front page from the blocks your recipes advertise
+(otherwise the recipes' own front page stands — e.g. the blog's `/writing`):
+
+```yaml
+homepage:
+  blocks:            # display order = list order
+    - "blog/recent"
+    - "project/grid"
 ```
 
 Available registry keys out of the box: `blog`, `project`. See `templates/recipe-registry.json` for the full catalog and [docs/recipe-registry.md](recipe-registry.md) for how the registry works.
@@ -81,12 +97,13 @@ ddev drush dq:scaffold
 This single command:
 
 1. Installs Drupal (`drush site:install`)
-2. Generates a real theme from the starterkit (`drupal generate-theme`)
+2. Generates a real theme from the starterkit (`drupal generate-theme`) and bakes the chosen page-shell layout into it (the shell template is yours to edit afterwards)
 3. Writes any `theme_design` overrides from `config.dq.yml` to `presets/overrides.css`
-4. Applies each recipe in order (`drush recipe …`), injecting recipe `theme-assets/` into the theme
-5. Installs deps and applies the chosen design preset — `npm install && npm run preset` — which fetches any preset fonts and builds the theme (unless `build: false`)
+4. Applies each recipe in order (`drush recipe …` — passing any `options:` as native recipe `--input`s), injecting recipe `theme-assets/` into the theme
+5. Composes the homepage when `homepage.blocks` is set: places the chosen recipe blocks and points the front page at the dedicated `/home` view
 6. Applies any `recipe_config` overrides
-7. Rebuilds caches
+7. Installs deps and applies the chosen design preset — `npm install && npm run preset` — which fetches any preset fonts and builds the theme (unless `build: false`)
+8. Rebuilds caches
 
 The site is live at `https://mysite.ddev.site`.
 

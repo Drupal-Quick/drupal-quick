@@ -177,13 +177,27 @@ final class ScaffoldCommand extends Command {
       // is set after recipes (step 3.5) so recipe-set defaults do not clobber it.
       Drush::drush(Drush::aliasManager()->getSelf(), 'theme:enable', [$themeName], ['yes' => TRUE])->mustRun();
 
-      // Seed the page-shell arrangement (theme setting `layout`: sidebar |
-      // single). Only when set — the theme's preprocess falls back to
-      // 'sidebar'. Both arrangements are compiled, so this stays flippable
-      // after scaffold with a plain config:set + cache rebuild.
-      if ($themeLayout) {
-        $this->io->writeln("🧭 Setting page layout '{$themeLayout}'...");
-        Drush::drush(Drush::aliasManager()->getSelf(), 'config:set', ["{$themeName}.settings", 'layout', $themeLayout], ['yes' => TRUE])->mustRun();
+      // Bake the chosen page-shell arrangement. Layout is a scaffold-time
+      // choice, not a runtime setting: the starterkit ships the default shell
+      // (templates/includes/page-shell.html.twig — the sidebar arrangement,
+      // embedded by both page templates) plus one file per alternative
+      // (page-shell--<layout>.html.twig). The chosen variant replaces the
+      // shell, the unchosen ones are removed, and from then on the shell is
+      // ordinary Twig the user edits directly. Runs before the theme build, so
+      // only the chosen arrangement's classes are compiled.
+      $shellDir = "{$themeDir}/templates/includes";
+      if ($themeLayout && $themeLayout !== 'sidebar') {
+        $variant = "{$shellDir}/page-shell--{$themeLayout}.html.twig";
+        if (file_exists($variant)) {
+          $this->io->writeln("🧭 Baking the '{$themeLayout}' page shell...");
+          copy($variant, "{$shellDir}/page-shell.html.twig");
+        }
+        else {
+          $this->io->warning("Unknown layout '{$themeLayout}' — no page-shell--{$themeLayout}.html.twig in the starterkit. Keeping the default shell.");
+        }
+      }
+      foreach (glob("{$shellDir}/page-shell--*.html.twig") ?: [] as $variantFile) {
+        unlink($variantFile);
       }
 
       // Token application is deferred to the preset step (`npm run preset` in

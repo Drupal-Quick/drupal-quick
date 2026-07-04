@@ -94,6 +94,37 @@ no dispatcher.
 - Self-hosted fonts are pulled **on demand**: a directory preset's `fonts.json`
   pins a URL + `sha256`, fetched into `src/fonts/` (gitignored) at preset time —
   **never commit font binaries**. See `docs/presets.md`.
+- **Content-scale contract:** presets define `--text-title`, `--text-meta`,
+  `--spacing-flow` (+ `--spacing-row`); recipe templates use ONLY those
+  utilities (`text-title`, `text-meta`, `gap-flow`, `py-row`) for type scale and
+  inter-unit spacing — never raw `text-sm`/`gap-6`. That's how a preset's scale
+  reaches recipe markup. See `docs/presets.md` § contract.
+
+## Site composition (config.dq.yml → scaffold)
+
+- **Recipe options = native recipe inputs.** Declared in the recipe's
+  `recipe.yml` `input:` (typed, always defaulted), consumed in actions as
+  `'${name}'`, set by users via `- name: <key>` / `options:` entries, passed by
+  `dq:scaffold` as `--input=<recipe-dir>.<name>=<value>`. Inputs parameterize
+  action *values* only — they cannot skip actions; conditionality lives in the
+  scaffold. Substituted values arrive as strings.
+- **Layout is baked at scaffold time, not a runtime setting.** The starterkit
+  ships the default shell (`templates/includes/page-shell.html.twig`, the
+  sidebar arrangement, embedded by both page templates) plus one file per
+  alternative (`page-shell--<layout>.html.twig`). `dq:scaffold` copies the
+  chosen variant over the shell and deletes the rest — afterwards the shell is
+  ordinary Twig the user edits directly. No theme setting, no settings form,
+  no runtime branch; only the chosen arrangement's classes get compiled.
+- **Homepage composition:** recipes advertise placeable blocks in
+  `composer.json` `extra.dq.recipe.blocks`; `homepage.blocks` entries
+  (`"<recipe>/<block>"`, order = weight) become block config in the content
+  region, `<front>`-only, and the front page moves to the dedicated always-empty
+  `/home` view. Capabilities ship with the recipe; *placement* is scaffold-side
+  selection. Omit `homepage:` → the recipes' own front page stands.
+- The registry is a **generated cache** (`bin/dq-registry-build`) carrying
+  label/package/url + `blocks` + an `options` summary of each recipe's inputs
+  (so `dq-init --interactive` can ask before packages are fetched). Never
+  hand-edit it.
 
 ## Light-footprint rules
 

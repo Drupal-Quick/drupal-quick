@@ -24,6 +24,9 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
+          # The yaml extension lets the script summarise each recipe's input
+          # block (wizard-facing options) into the registry.
+          extensions: yaml
 
       # No Composer install needed — the script is standalone PHP with no deps.
       # GITHUB_TOKEN raises the API rate limit and reads public org repos. For
