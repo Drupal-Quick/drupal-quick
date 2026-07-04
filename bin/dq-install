@@ -123,8 +123,13 @@ if (!in_array($peerPackage, $rootRequire, true)) {
 $toRequire = [];
 
 foreach ($recipes as $recipe) {
-    // A recipe entry is a registry key, an inline package spec
-    // ({package, url}), or a core/contrib path string (no Composer action).
+    // A recipe entry is a registry key, {name, options} (options map to the
+    // recipe's native inputs — consumed by dq:scaffold, not here), an inline
+    // package spec ({package, url, options?}), or a core/contrib path string
+    // (no Composer action).
+    if (is_array($recipe) && isset($recipe['name'])) {
+        $recipe = $recipe['name'];
+    }
     if (is_array($recipe)) {
         $package = $recipe['package'] ?? null;
         $url     = $recipe['url'] ?? '';
@@ -190,4 +195,39 @@ foreach ($toRequire as $package) {
 }
 
 echo "\n✅ Recipe packages installed.\n";
-echo "   Run `drush dq:scaffold` to build your site.\n";
+
+// --------------------------------------------------------------- Options
+// Progressive disclosure: now that the recipe packages are unpacked, read each
+// one's recipe.yml `input:` block and surface the available options. Purely
+// advisory — every input carries a default, so setting nothing is always fine.
+$advertised = false;
+foreach ($toRequire as $package) {
+    $short      = ($pos = strpos($package, '/')) !== false ? substr($package, $pos + 1) : $package;
+    $recipeFile = $projectRoot . '/recipes/' . $short . '/recipe.yml';
+    if (!file_exists($recipeFile)) {
+        continue;
+    }
+    try {
+        $recipeData = Yaml::parseFile($recipeFile);
+    } catch (ParseException) {
+        continue;
+    }
+    $inputs = $recipeData['input'] ?? [];
+    if (empty($inputs)) {
+        continue;
+    }
+    if (!$advertised) {
+        echo "\nℹ️  Optional recipe settings — set under `options:` on the recipe's entry\n";
+        echo "   in config.dq.yml (defaults apply when unset):\n";
+        $advertised = true;
+    }
+    echo "   {$short}:\n";
+    foreach ($inputs as $name => $definition) {
+        $description = $definition['description'] ?? '';
+        $default     = $definition['default']['value'] ?? null;
+        $defaultText = is_scalar($default) ? ' [default: ' . var_export($default, true) . ']' : '';
+        echo "     - {$name}: {$description}{$defaultText}\n";
+    }
+}
+
+echo "\n   Run `drush dq:scaffold` to build your site.\n";

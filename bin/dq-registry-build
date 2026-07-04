@@ -125,13 +125,20 @@ function entry_from_composer(?array $composer, string $url): ?array {
   if (!is_array($meta) || empty($meta['key'])) {
     return null;
   }
+  $entry = [
+    'label'   => (string) ($meta['label'] ?? $meta['key']),
+    'package' => (string) ($composer['name'] ?? ''),
+    'url'     => $url,
+  ];
+  // Placeable blocks the recipe advertises for homepage composition
+  // (config.dq.yml homepage.blocks entries "<recipe-key>/<block-key>").
+  // Carried verbatim: { <block-key>: { plugin, label } }.
+  if (!empty($meta['blocks']) && is_array($meta['blocks'])) {
+    $entry['blocks'] = $meta['blocks'];
+  }
   return [
     'key'   => (string) $meta['key'],
-    'entry' => [
-      'label'   => (string) ($meta['label'] ?? $meta['key']),
-      'package' => (string) ($composer['name'] ?? ''),
-      'url'     => $url,
-    ],
+    'entry' => $entry,
   ];
 }
 
