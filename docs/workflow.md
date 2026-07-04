@@ -50,8 +50,9 @@ layout (`sidebar` | `single`), and recipes. Everything has a sane default — an
 untouched file scaffolds a complete site.
 
 A recipe entry can be a registry key, a core/contrib path, a key with an
-`options:` map (the recipe's native inputs — `dq-install` lists what each
-fetched recipe supports), or an inline package spec for a one-off recipe:
+`options:` map (the recipe's native inputs — `dq-install` writes each fetched
+recipe's options back here as a commented block, ready to uncomment), or an
+inline package spec for a one-off recipe:
 
 ```yaml
 recipes:
@@ -83,6 +84,8 @@ ddev composer exec dq-install
 ```
 
 Reads `config.dq.yml`, registers any recipe VCS repos in `composer.json`, and `composer require`s each recipe package. `core-recipe-unpack` unpacks them into `recipes/`.
+
+Afterwards it writes each recipe's available options — read from the now-unpacked `recipe.yml` — back into `config.dq.yml` as a **commented block under that recipe's entry**, so you can uncomment (remove the leading `# `) and edit to override a default. Nothing is enabled until you do; defaults apply otherwise. Pass `dq-install --exclude-options` to skip the rewrite and just list the options in the terminal.
 
 > **Local dev note:** if recipe/theme packages are on your local machine rather than published to a Git remote, add them as path repos in `composer.json` before this step. VCS repos (GitHub) require DDEV to have GitHub auth — run `ddev auth ssh` first.
 

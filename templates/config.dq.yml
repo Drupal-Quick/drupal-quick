@@ -27,14 +27,16 @@ theme:
 #   - a short key from the registry (templates/recipe-registry.json), e.g. "blog"
 #   - a core/contrib path, e.g. "core/recipes/standard"
 #   - a key plus per-recipe options (the recipe's native inputs — all optional,
-#     with sane defaults; `dq-install` lists what each fetched recipe supports):
+#     with sane defaults):
 #       - name: "blog"
 #         options:
 #           items_per_page: 10
 #   - an inline package spec for an ad-hoc recipe (no registry edit needed):
 #       - { package: "you/recipe-x", url: "https://github.com/you/recipe-x" }
 # Run `composer exec dq-install` after editing — it fetches any package recipes
-# (registry keys or inline specs) before `drush dq:scaffold`.
+# (registry keys or inline specs) before `drush dq:scaffold`, and writes each
+# recipe's available options here as a commented block under its entry, ready to
+# uncomment. Pass --exclude-options to just list them in the terminal instead.
 recipes:
   - "core/recipes/standard"
   - "blog"

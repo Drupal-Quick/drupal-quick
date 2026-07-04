@@ -107,7 +107,11 @@ no dispatcher.
   `'${name}'`, set by users via `- name: <key>` / `options:` entries, passed by
   `dq:scaffold` as `--input=<recipe-dir>.<name>=<value>`. Inputs parameterize
   action *values* only — they cannot skip actions; conditionality lives in the
-  scaffold. Substituted values arrive as strings.
+  scaffold. Substituted values arrive as strings. **`dq-install` writes each
+  fetched recipe's options into config.dq.yml as a commented block under its
+  entry** (in place; promotes a bare `- "key"` to `- name: "key"`; idempotent;
+  prefixes `# ` so uncommenting is valid YAML). `--exclude-options` prints to
+  the terminal instead.
 - **Layout is baked at scaffold time, not a runtime setting.** The starterkit
   ships the default shell (`templates/includes/page-shell.html.twig`, the
   sidebar arrangement, embedded by both page templates) plus one file per
