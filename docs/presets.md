@@ -89,7 +89,11 @@ chosen preset  ←  presets/overrides.css (theme_design from config.dq.yml)
 ```
 
 `overrides.css` persists, so it survives re-skinning: `npm run preset corporate`
-keeps the user's `theme_design` tweaks on top of the new preset.
+keeps the user's `theme_design` tweaks on top of the new preset. In a generated
+site it is **committed** (the starterkit gitignores it only for its own repo
+hygiene, and deliberately withholds its `.gitignore` from `generate-theme` so
+the site's root rules govern) — it cannot be regenerated once `dq:cleanup`
+removes config.dq.yml.
 
 ## The content-scale contract
 
