@@ -114,7 +114,7 @@ static:                  # optional, used by `drush dq:static`
 
 ## Requirements
 
-PHP 8.1+ · Drupal 11.1.8+ (recipe modules use module preprocess OOP hooks) · Drush 12.5+ · Node.js/npm (for the theme build)
+PHP 8.1+ · Drupal 11.3+ (tested on 11.3 and 11.4 — the scaffold auto-detects 11.4's consolidated `dr` CLI) · Drush 12.5+ · Node.js/npm (for the theme build)
 
 ---
 

@@ -120,7 +120,9 @@ $rootRequire = array_merge(
 );
 if (!in_array($peerPackage, $rootRequire, true)) {
     echo "📎 Adding {$peerPackage} to project composer.json...\n";
-    $composer['require'][$peerPackage] = '^1.0';
+    // core-recipe-unpack version-syncs with Drupal core (11.2+); the early
+    // standalone 1.x alphas are gone.
+    $composer['require'][$peerPackage] = '^11.2';
     file_put_contents(
         $composerFile,
         json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
