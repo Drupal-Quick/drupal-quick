@@ -36,6 +36,25 @@ trait DrupalQuickHelpers {
   }
 
   /**
+   * Locates Drupal core's consolidated CLI (vendor/bin/dr, Drupal 11.4+).
+   *
+   * Returns the command prefix ['php', <path>] or NULL on older cores. Used
+   * for generate-theme and recipe application: 11.4 moved those off the
+   * legacy core/scripts/drupal + drush paths (the legacy script resolves the
+   * autoloader relative to the docroot and breaks on relocated-docroot
+   * projects, and the drush `recipe` command is gone).
+   */
+  protected function drupalCoreCli(): ?array {
+    $root = $this->drupalRoot();
+    foreach ([getcwd() . '/vendor/bin/dr', dirname($root) . '/vendor/bin/dr', "{$root}/vendor/bin/dr"] as $candidate) {
+      if (is_file($candidate)) {
+        return ['php', $candidate];
+      }
+    }
+    return NULL;
+  }
+
+  /**
    * Runs an external command and streams its output to the console.
    *
    * Uses Symfony Process with array arguments — no shell is invoked, so there

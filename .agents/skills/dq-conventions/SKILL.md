@@ -69,8 +69,10 @@ no dispatcher.
 
 - Module namespace = the **module** machine name (`Drupal\dq_blog\Hook`), not the
   theme — so no `STARTERKIT` token in module PHP.
-- Recipe modules use **module** OOP preprocess hooks — introduced in Drupal
-  **11.2**, backported to **11.1.8** — so the stack floor is `^11.1.8`.
+- Recipe modules use **module** OOP preprocess hooks (introduced in Drupal
+  11.2, backported to 11.1.8). The **stack floor is `^11.3`** — the tested
+  range is 11.3 and 11.4 (the scaffold auto-detects 11.4's consolidated `dr`
+  CLI and its stricter recipe validation is accounted for).
 - The **starterkit** keeps its own presentation hooks procedural in `.theme`
   (one impl each, no conflict); it does **not** use OOP theme hooks (those are
   11.3+, and we don't need them).

@@ -153,8 +153,12 @@ final class ScaffoldCommand extends Command {
         return self::FAILURE;
       }
 
+      // Prefer core's consolidated CLI (vendor/bin/dr, 11.4+); fall back to
+      // the legacy script on older cores (see drupalCoreCli()).
+      $drupalCli = $this->drupalCoreCli() ?? ['php', "{$drupalRoot}/core/scripts/drupal"];
+
       $genCode = $this->runProcess([
-        'php', "{$drupalRoot}/core/scripts/drupal", 'generate-theme',
+        ...$drupalCli, 'generate-theme',
         $themeName,
         "--name={$themeTitle}",
         '--description=A custom Drupal theme built with Tailwind CSS and Vite.',
@@ -266,20 +270,33 @@ final class ScaffoldCommand extends Command {
 
         // The entry's options map to native recipe inputs: each becomes
         // --input=<recipe-dir>.<name>=<value> (core prefixes input names with
-        // the recipe directory's basename). Passed as extra args because the
-        // site-process option serializer can't repeat an option; Symfony
-        // parses them as options regardless of position. Unset options fall
-        // back to the recipe.yml input defaults.
-        $args = [$path];
+        // the recipe directory's basename). Unset options fall back to the
+        // recipe.yml input defaults.
+        $inputFlags = [];
         foreach ($options as $key => $value) {
           if (!is_scalar($value)) {
             $this->io->warning("Skipping non-scalar option '{$key}' for recipe '{$path}'.");
             continue;
           }
-          $value  = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
-          $args[] = '--input=' . basename($path) . ".{$key}={$value}";
+          $value        = is_bool($value) ? ($value ? '1' : '0') : (string) $value;
+          $inputFlags[] = '--input=' . basename($path) . ".{$key}={$value}";
         }
-        Drush::drush(Drush::aliasManager()->getSelf(), 'recipe', $args, ['yes' => TRUE])->mustRun();
+
+        // Core 11.4 moved recipe application to `dr recipe:apply` (the drush
+        // `recipe` command is gone); older cores still expose it via drush.
+        // The drush path passes --input flags as extra args because the
+        // site-process option serializer can't repeat an option; Symfony
+        // parses them as options regardless of position.
+        if ($dr = $this->drupalCoreCli()) {
+          $code = $this->runProcess([...$dr, 'recipe:apply', $path, ...$inputFlags, '--no-interaction']);
+          if ($code !== 0) {
+            $this->io->error("Applying recipe '{$path}' failed (exit code {$code}).");
+            return $code;
+          }
+        }
+        else {
+          Drush::drush(Drush::aliasManager()->getSelf(), 'recipe', [$path, ...$inputFlags], ['yes' => TRUE])->mustRun();
+        }
 
         // Inject theme assets when the recipe ships a theme-assets/ directory
         // (copyThemeAssets no-ops when it doesn't — no registry flag needed).
@@ -287,6 +304,13 @@ final class ScaffoldCommand extends Command {
           $this->copyThemeAssets($path, $themeName);
         }
       }
+    }
+
+    // 3.4. Recipes install modules in separate processes; rebuild so every
+    // subsequent drush call boots a container that knows the new extensions
+    // (without this, e.g. config:set can hit "entity type does not exist").
+    if (!empty($recipes)) {
+      Drush::drush(Drush::aliasManager()->getSelf(), 'cache:rebuild')->mustRun();
     }
 
     // 3.5. Set the generated theme as the site default (after recipes).
@@ -535,7 +559,7 @@ PHP;
         "name: 'DQ Hooks'",
         'type: module',
         "description: 'Umbrella for drupal-quick recipe behaviour submodules (native OOP hooks).'",
-        'core_version_requirement: ^11.1.8',
+        'core_version_requirement: ^11.3',
         "package: 'DQ'",
         '',
       ]));
