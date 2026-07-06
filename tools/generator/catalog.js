@@ -70,6 +70,25 @@ window.DQ_CATALOG = {
         flow: '2rem', row: '0.75rem',
       },
     },
+    {
+      key: 'quick',
+      label: 'Quick',
+      description: 'The quickthe.me brand language — Geom display over Inter body, navy + vibrant blue. The airiest scale.',
+      tokens: {
+        primary: '#15224f',
+        secondary: '#3056d3',
+        accent: '#0ea5e9',
+        paper: 'oklch(0.995 0.001 250)',
+        ink: 'oklch(0.25 0.035 265)',
+        muted: 'oklch(0.55 0.02 265)',
+        rule: 'oklch(0.92 0.006 250)',
+        // Body face; headings render in Geom via the preset's display token.
+        font: "'Inter', ui-sans-serif, system-ui, sans-serif",
+        title: '1.125rem', titleLh: '1.75rem',
+        meta: '0.875rem', metaLh: '1.25rem',
+        flow: '2.5rem', row: '1rem',
+      },
+    },
   ],
 
   recipes: [
