@@ -2,6 +2,7 @@
 
 namespace DrupalQuick\Drush\Commands;
 
+use DrupalQuick\Ddev\StaticPreview;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -30,8 +31,10 @@ final class StaticExportCommand extends Command {
   protected function configure(): void {
     $this
       ->addOption('base-url', NULL, InputOption::VALUE_REQUIRED, 'The production base URL for absolute links, passed to Tome as --uri (overrides config).')
+      ->addOption('ddev-preview', NULL, InputOption::VALUE_NONE, 'Also provision a DDEV preview vhost (https://static.<project>.ddev.site) serving the export beside the live site. Requires a DDEV project; run `ddev restart` once afterwards.')
       ->addUsage('dq:static')
-      ->addUsage('dq:static --base-url=https://example.com');
+      ->addUsage('dq:static --base-url=https://example.com')
+      ->addUsage('dq:static --ddev-preview');
   }
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
@@ -95,6 +98,67 @@ final class StaticExportCommand extends Command {
     $this->io->writeln("   Output: {$dir}/ (override via \$settings['tome_static_directory'] in settings.php).");
     $this->io->writeln("   Deploy it with `drush dq:deploy`.");
 
+    // 6. Optionally provision the DDEV preview vhost for the export.
+    if ($input->getOption('ddev-preview')) {
+      return $this->provisionDdevPreview($dir);
+    }
+
+    return self::SUCCESS;
+  }
+
+  /**
+   * Writes the DDEV preview vhost config: an nginx server block rooted at
+   * the export directory plus a config.*.yaml override registering the
+   * static.<project> hostname (see StaticPreview for the rendered content
+   * and ownership-marker semantics). Writing config is all that can happen
+   * from inside the web container — the user runs `ddev restart` once.
+   */
+  private function provisionDdevPreview(string $exportDir): int {
+    $projectRoot = dirname($this->drupalRoot());
+    $ddevConfig  = "{$projectRoot}/.ddev/config.yaml";
+    if (!file_exists($ddevConfig)) {
+      $this->io->error('--ddev-preview needs a DDEV project (.ddev/config.yaml not found).');
+      return self::FAILURE;
+    }
+
+    $configYaml = (string) file_get_contents($ddevConfig);
+    $hostname   = StaticPreview::hostname($configYaml);
+    $fqdn       = StaticPreview::fqdn($configYaml);
+    if ($hostname === NULL) {
+      $this->io->error("Could not read the project name from {$ddevConfig}.");
+      return self::FAILURE;
+    }
+
+    // Absolute in-container path for the nginx root (the export directory
+    // setting is normally relative to the project root).
+    $exportPath = str_starts_with($exportDir, '/') ? $exportDir : "{$projectRoot}/{$exportDir}";
+
+    $files = [
+      "{$projectRoot}/.ddev/nginx_full/static.conf" => StaticPreview::nginxConf($fqdn, $exportPath),
+      "{$projectRoot}/.ddev/config.static.yaml" => StaticPreview::hostnamesOverride($hostname),
+    ];
+    $wrote = FALSE;
+    foreach ($files as $path => $contents) {
+      $existing = file_exists($path) ? (string) file_get_contents($path) : NULL;
+      if (!StaticPreview::isManaged($existing)) {
+        $this->io->writeln('   Left ' . basename($path) . ' untouched (marker removed — user-owned).');
+        continue;
+      }
+      if ($existing === $contents) {
+        continue;
+      }
+      if (!is_dir(dirname($path))) {
+        mkdir(dirname($path), 0777, TRUE);
+      }
+      file_put_contents($path, $contents);
+      $this->io->writeln("   Wrote {$path}");
+      $wrote = TRUE;
+    }
+
+    $this->io->writeln("🌐 Static preview vhost: https://{$fqdn}");
+    if ($wrote) {
+      $this->io->writeln('   Run `ddev restart` once to activate it.');
+    }
     return self::SUCCESS;
   }
 
