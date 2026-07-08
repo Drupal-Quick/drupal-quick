@@ -85,7 +85,10 @@ ddev composer exec dq-install
 
 Reads `config.dq.yml`, registers any recipe VCS repos in `composer.json`, and `composer require`s each recipe package. `core-recipe-unpack` unpacks them into `recipes/`.
 
-Afterwards it writes each recipe's available options — read from the now-unpacked `recipe.yml` — back into `config.dq.yml` as a **commented block under that recipe's entry**, so you can uncomment (remove the leading `# `) and edit to override a default. Nothing is enabled until you do; defaults apply otherwise. Pass `dq-install --exclude-options` to skip the rewrite and just list the options in the terminal.
+Afterwards it rewrites `config.dq.yml` in a single pass:
+
+- **Recipe options** — each recipe's user-tunable inputs (from its `recipe.yml input:` block) are written as a commented block directly under that recipe's entry. Uncomment (remove the leading `# `) and edit to override a default; every input has a default so an untouched file still works. Pass `--exclude-options` to print them in the terminal instead and leave the file untouched.
+- **Block catalog** — a `# ── Available recipe blocks` section is injected (or updated) listing every block your installed recipes advertise, keyed as `<recipe>/<block>`. The section includes the `homepage:` snippet to uncomment and edit. It also serves as a reference for future placement targets (sidebars, banners, etc.); for now only `homepage:` is acted on by `dq:scaffold`.
 
 > **Local dev note:** if recipe/theme packages are on your local machine rather than published to a Git remote, add them as path repos in `composer.json` before this step. VCS repos (GitHub) require DDEV to have GitHub auth — run `ddev auth ssh` first.
 

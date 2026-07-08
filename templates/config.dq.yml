@@ -41,12 +41,11 @@ recipes:
   - "core/recipes/standard"
   - "blog"
 
-# Homepage composition (optional). Pick which recipe-advertised blocks make up
-# the front page, in order — each entry is "<recipe-key>/<block-key>" (recipes
-# advertise their placeable blocks; `dq-install` and the registry list them).
-# When set, the front page becomes the composed blocks; when omitted, whatever
-# front page the recipes configure stands (e.g. the blog's /writing). Placed
-# blocks are ordinary block config — edit later at /admin/structure/block.
+# Homepage composition (optional). After `dq-install` runs, this section is
+# replaced with a block catalog listing every block your installed recipes
+# advertise, together with the homepage: snippet to uncomment and edit. The
+# catalog also serves as a reference for future placement targets (sidebars,
+# banners, etc.) — for now, only homepage: is acted on by dq:scaffold.
 # homepage:
 #   blocks:
 #     - "blog/recent"

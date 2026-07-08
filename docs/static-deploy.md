@@ -92,6 +92,35 @@ just writes `.github/workflows/deploy-pages.yml`. It is loosely coupled to the
 build: if `html/` is missing it tells you to run `dq:static` first rather than
 regenerating implicitly.
 
+### Previewing the export under DDEV (`--ddev-preview`)
+
+```bash
+ddev drush dq:static --ddev-preview
+ddev restart   # once, to activate the new hostname
+# then browse https://static.<project>.ddev.site
+```
+
+The flag provisions a second vhost in the same DDEV project that serves the
+export directory as plain files (no PHP handler), beside the live site — so
+the export can be checked exactly as a host would serve it, and re-exports
+are just a refresh away. It writes two files:
+
+- `.ddev/nginx_full/static.conf` — a static-only nginx server block rooted
+  at the export directory.
+- `.ddev/config.static.yaml` — a DDEV config override registering
+  `static.<project>` in `additional_hostnames`, so the user's own
+  `config.yaml` is never edited.
+
+Both carry a `#dq-generated` marker: they are rewritten on every
+`--ddev-preview` run until the marker line is removed, at which point the
+tool leaves them alone (the same ownership convention DDEV uses for its
+generated files). The command runs inside the web container, so it cannot
+restart DDEV itself — hence the one-time `ddev restart`.
+
+Caveat: DDEV config overrides *replace* list values. If the project already
+declares `additional_hostnames` in `config.yaml`, fold the static hostname
+into that list and delete `config.static.yaml`.
+
 ### Deploy credentials
 
 `dq:deploy` runs inside the DDEV web container, so the credentials must be present

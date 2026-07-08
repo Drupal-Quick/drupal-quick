@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quick — config.dq.yml generator</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <script src="catalog.js"></script>
+  <script src="app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+
+    /* ------------------------------------------------------------------
+     * Preview pane — a mock of the scaffolded homepage, styled entirely by
+     * CSS variables set from the selected preset's real token values (see
+     * catalog.js) plus any theme_design overrides. Namespaced --pv-* so
+     * nothing collides with the generator's own Tailwind styling.
+     * ------------------------------------------------------------------ */
+    .pv {
+      background: var(--pv-paper);
+      color: var(--pv-ink);
+      font-family: var(--pv-font);
+    }
+    .pv a { color: var(--pv-ink); text-decoration: none; }
+    .pv-site-name {
+      color: var(--pv-primary);
+      font-weight: 700;
+      font-size: 1.125rem;
+      letter-spacing: -0.01em;
+    }
+    .pv-nav-v { display: flex; flex-direction: column; gap: 0.375rem; margin-top: 1.25rem; }
+    .pv-nav-h { display: flex; gap: 1.25rem; }
+    .pv-nav-link { font-size: var(--pv-meta); line-height: var(--pv-meta-lh); color: var(--pv-muted); }
+    .pv-nav-link:first-child { color: var(--pv-primary); font-weight: 600; }
+    .pv-block + .pv-block { margin-top: var(--pv-flow); }
+    .pv-h2 {
+      font-size: var(--pv-title);
+      line-height: var(--pv-title-lh);
+      font-weight: 700;
+      color: var(--pv-primary);
+      margin-bottom: calc(var(--pv-flow) / 2);
+    }
+    .pv-row {
+      display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+      padding-top: var(--pv-row); padding-bottom: var(--pv-row);
+      border-top: 1px solid var(--pv-rule);
+    }
+    .pv-row-title { font-size: var(--pv-title); line-height: var(--pv-title-lh); }
+    .pv-row-date { font-size: var(--pv-meta); line-height: var(--pv-meta-lh); color: var(--pv-muted); white-space: nowrap; }
+    .pv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--pv-flow); }
+    .pv-card-thumb {
+      aspect-ratio: 4 / 3; border-radius: 0.375rem;
+      background: linear-gradient(135deg, var(--pv-secondary), var(--pv-accent));
+      opacity: 0.85;
+    }
+    .pv-card-title { font-size: var(--pv-title); line-height: var(--pv-title-lh); font-weight: 600; margin-top: 0.5rem; }
+    .pv-card-blurb { font-size: var(--pv-meta); line-height: var(--pv-meta-lh); color: var(--pv-muted); }
+    .pv-welcome { border: 1px dashed var(--pv-rule); border-radius: 0.5rem; padding: 2rem; text-align: center; color: var(--pv-muted); font-size: var(--pv-meta); }
+  </style>
+</head>
+<body class="bg-zinc-100 text-zinc-900 antialiased">
+
+<div x-data="dqGenerator()" x-cloak class="flex h-screen overflow-hidden">
+
+  <!-- ═══════════════════════════════ Form column ═══════════════════════ -->
+  <aside class="w-1/3 min-w-[340px] max-w-[480px] bg-white border-r border-zinc-200 flex flex-col">
+
+    <header class="px-5 py-4 border-b border-zinc-200">
+      <h1 class="text-base font-bold tracking-tight">Quick <span class="font-normal text-zinc-400">/</span> config generator</h1>
+      <p class="text-xs text-zinc-500 mt-1">Compose a <code class="font-mono">config.dq.yml</code>, then paste or download it into your project before <code class="font-mono">drush dq:scaffold</code>.</p>
+    </header>
+
+    <div class="flex-1 overflow-y-auto">
+
+      <!-- ─────────────── 1. Site information ─────────────── -->
+      <section class="border-b border-zinc-200">
+        <button @click="toggleSection('site')" class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-zinc-50">
+          <span class="text-xs font-semibold tracking-widest uppercase text-zinc-600">1 · Site information</span>
+          <span class="text-zinc-400 text-xs" x-text="open === 'site' ? '−' : '+'"></span>
+        </button>
+        <div x-show="open === 'site'" class="px-5 pb-5 space-y-3">
+          <label class="block">
+            <span class="text-xs font-medium text-zinc-600">Site name</span>
+            <input type="text" x-model="site.name" class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-zinc-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-zinc-600">Admin username</span>
+            <input type="text" x-model="site.admin_user" class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-zinc-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-zinc-600">Admin password</span>
+            <input type="text" x-model="site.admin_pass" placeholder="Leave blank to auto-generate at scaffold" class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none">
+            <span class="text-[11px] text-zinc-400 mt-1 block">Blank = a strong password is generated and shown once during scaffold.</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- ─────────────── 2. Appearance ─────────────── -->
+      <section class="border-b border-zinc-200">
+        <button @click="toggleSection('appearance')" class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-zinc-50">
+          <span class="text-xs font-semibold tracking-widest uppercase text-zinc-600">2 · Appearance</span>
+          <span class="text-zinc-400 text-xs" x-text="open === 'appearance' ? '−' : '+'"></span>
+        </button>
+        <div x-show="open === 'appearance'" class="px-5 pb-5 space-y-4">
+
+          <label class="block">
+            <span class="text-xs font-medium text-zinc-600">Theme title</span>
+            <input type="text" x-model="theme.title" class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm focus:border-zinc-500 focus:outline-none">
+          </label>
+          <label class="block">
+            <span class="text-xs font-medium text-zinc-600">Machine name</span>
+            <input type="text" x-model="theme.machine_name" class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm font-mono focus:border-zinc-500 focus:outline-none">
+          </label>
+
+          <div>
+            <span class="text-xs font-medium text-zinc-600">Design preset</span>
+            <div class="mt-1.5 space-y-1.5">
+              <template x-for="p in catalog.presets" :key="p.key">
+                <label class="flex items-start gap-2.5 rounded border px-3 py-2 cursor-pointer"
+                       :class="theme.preset === p.key ? 'border-zinc-800 bg-zinc-50' : 'border-zinc-200 hover:border-zinc-400'">
+                  <input type="radio" name="preset" :value="p.key" x-model="theme.preset" class="mt-0.5 accent-zinc-800">
+                  <span class="flex-1">
+                    <span class="flex items-center gap-2">
+                      <span class="text-sm font-medium" x-text="p.label"></span>
+                      <span class="flex gap-1">
+                        <span class="w-3 h-3 rounded-full border border-zinc-200" :style="`background:${p.tokens.primary}`"></span>
+                        <span class="w-3 h-3 rounded-full border border-zinc-200" :style="`background:${p.tokens.secondary}`"></span>
+                        <span class="w-3 h-3 rounded-full border border-zinc-200" :style="`background:${p.tokens.accent}`"></span>
+                      </span>
+                    </span>
+                    <span class="block text-[11px] text-zinc-500 mt-0.5" x-text="p.description"></span>
+                  </span>
+                </label>
+              </template>
+            </div>
+          </div>
+
+          <div>
+            <span class="text-xs font-medium text-zinc-600">Page layout <span class="font-normal text-zinc-400">(baked at scaffold — editable Twig afterwards)</span></span>
+            <div class="mt-1.5 grid grid-cols-2 gap-1.5">
+              <label class="rounded border px-3 py-2 cursor-pointer text-center"
+                     :class="theme.layout === 'sidebar' ? 'border-zinc-800 bg-zinc-50' : 'border-zinc-200 hover:border-zinc-400'">
+                <input type="radio" name="layout" value="sidebar" x-model="theme.layout" class="sr-only">
+                <span class="flex gap-1 h-8 mb-1.5"><span class="w-1/4 bg-zinc-300 rounded-sm"></span><span class="flex-1 bg-zinc-100 border border-zinc-200 rounded-sm"></span></span>
+                <span class="text-xs font-medium">Sidebar</span>
+              </label>
+              <label class="rounded border px-3 py-2 cursor-pointer text-center"
+                     :class="theme.layout === 'single' ? 'border-zinc-800 bg-zinc-50' : 'border-zinc-200 hover:border-zinc-400'">
+                <input type="radio" name="layout" value="single" x-model="theme.layout" class="sr-only">
+                <span class="flex flex-col gap-1 h-8 mb-1.5"><span class="h-2 bg-zinc-300 rounded-sm"></span><span class="flex-1 bg-zinc-100 border border-zinc-200 rounded-sm"></span></span>
+                <span class="text-xs font-medium">Single column</span>
+              </label>
+            </div>
+          </div>
+
+          <label class="flex items-center gap-2">
+            <input type="checkbox" x-model="theme.build" class="accent-zinc-800">
+            <span class="text-xs text-zinc-600">Build theme assets during scaffold (<code class="font-mono">npm install && npm run build</code>)</span>
+          </label>
+
+          <!-- Theme design overrides -->
+          <div class="rounded border border-zinc-200 bg-zinc-50/60 p-3 space-y-3">
+            <span class="text-[11px] font-semibold tracking-widest uppercase text-zinc-500">Theme design overrides</span>
+            <label class="block">
+              <span class="text-xs font-medium text-zinc-600">Primary color</span>
+              <span class="mt-1 flex items-center gap-2">
+                <input type="color" :value="design.primary_color || previewTokens.primary" @input="design.primary_color = $event.target.value" class="h-8 w-10 rounded border border-zinc-300 bg-white p-0.5 cursor-pointer">
+                <input type="text" x-model="design.primary_color" placeholder="No override" class="flex-1 rounded border border-zinc-300 px-2.5 py-1.5 text-sm font-mono placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none">
+                <button x-show="design.primary_color" @click="design.primary_color = ''" class="text-xs text-zinc-400 hover:text-zinc-600">✕</button>
+              </span>
+            </label>
+            <label class="block">
+              <span class="text-xs font-medium text-zinc-600">Font family</span>
+              <select x-model="design.font_family" class="mt-1 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm bg-white focus:border-zinc-500 focus:outline-none">
+                <template x-for="f in catalog.fonts" :key="f.value">
+                  <option :value="f.value" x-text="f.label"></option>
+                </template>
+              </select>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── 3. Recipes ─────────────── -->
+      <section class="border-b border-zinc-200">
+        <button @click="toggleSection('recipes')" class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-zinc-50">
+          <span class="text-xs font-semibold tracking-widest uppercase text-zinc-600">3 · Recipes</span>
+          <span class="text-zinc-400 text-xs" x-text="open === 'recipes' ? '−' : '+'"></span>
+        </button>
+        <div x-show="open === 'recipes'" class="px-5 pb-5 space-y-2">
+
+          <label class="flex items-start gap-2.5 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 opacity-70">
+            <input type="checkbox" checked disabled class="mt-0.5">
+            <span>
+              <span class="text-sm font-medium">Standard <span class="text-[10px] font-normal text-zinc-400 ml-1">core/recipes/standard · always applied</span></span>
+              <span class="block text-[11px] text-zinc-500 mt-0.5">Drupal core's baseline install profile as a recipe.</span>
+            </span>
+          </label>
+
+          <template x-for="r in catalog.recipes" :key="r.key">
+            <div class="rounded border" :class="selected[r.key] ? 'border-zinc-800' : 'border-zinc-200'">
+              <label class="flex items-start gap-2.5 px-3 py-2 cursor-pointer" :class="!selected[r.key] && 'hover:bg-zinc-50'">
+                <input type="checkbox" x-model="selected[r.key]" @change="onRecipeToggle(r.key)" class="mt-0.5 accent-zinc-800">
+                <span>
+                  <span class="text-sm font-medium" x-text="r.label"></span>
+                  <span class="block text-[11px] text-zinc-500 mt-0.5" x-text="r.description"></span>
+                </span>
+              </label>
+              <!-- Recipe config subsection -->
+              <div x-show="selected[r.key] && r.options.length" class="border-t border-zinc-200 bg-zinc-50/60 px-3 py-2.5 space-y-2">
+                <span class="text-[11px] font-semibold tracking-widest uppercase text-zinc-500" x-text="`${r.label} options`"></span>
+                <template x-for="o in r.options" :key="o.name">
+                  <label class="block">
+                    <span class="text-xs font-medium text-zinc-600 font-mono" x-text="o.name"></span>
+                    <input :type="o.type === 'integer' ? 'number' : 'text'" x-model="options[r.key][o.name]"
+                           class="mt-1 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm bg-white focus:border-zinc-500 focus:outline-none">
+                    <span class="text-[11px] text-zinc-400 mt-0.5 block" x-text="`${o.description} Default: ${o.default}.`"></span>
+                  </label>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <!-- ─────────────── 4. Content layout ─────────────── -->
+      <section class="border-b border-zinc-200">
+        <button @click="toggleSection('layout')" class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-zinc-50">
+          <span class="text-xs font-semibold tracking-widest uppercase text-zinc-600">4 · Content layout</span>
+          <span class="text-zinc-400 text-xs" x-text="open === 'layout' ? '−' : '+'"></span>
+        </button>
+        <div x-show="open === 'layout'" class="px-5 pb-5 space-y-3">
+          <p class="text-[11px] text-zinc-500">Compose the homepage from blocks your recipes advertise. Leave empty to keep the recipes' own front page (e.g. the blog's <code class="font-mono">/writing</code>).</p>
+
+          <div x-show="!availableBlocks.length" class="rounded border border-dashed border-zinc-300 px-3 py-4 text-center text-xs text-zinc-400">
+            Select a recipe to see its blocks.
+          </div>
+
+          <div x-show="homepage.length">
+            <span class="text-[11px] font-semibold tracking-widest uppercase text-zinc-500">Homepage · display order</span>
+            <div class="mt-1.5 space-y-1.5">
+              <template x-for="(id, i) in homepage" :key="id">
+                <div class="flex items-center gap-2 rounded border border-zinc-800 bg-zinc-50 px-3 py-2">
+                  <span class="flex-1">
+                    <span class="text-sm font-medium" x-text="blockMeta(id)?.label"></span>
+                    <span class="block text-[10px] font-mono text-zinc-400" x-text="id"></span>
+                  </span>
+                  <button @click="moveBlock(i, -1)" :disabled="i === 0" class="text-zinc-500 hover:text-zinc-800 disabled:opacity-25 px-1">↑</button>
+                  <button @click="moveBlock(i, 1)" :disabled="i === homepage.length - 1" class="text-zinc-500 hover:text-zinc-800 disabled:opacity-25 px-1">↓</button>
+                  <button @click="removeBlock(id)" class="text-zinc-400 hover:text-red-600 px-1">✕</button>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div x-show="unplacedBlocks.length">
+            <span class="text-[11px] font-semibold tracking-widest uppercase text-zinc-500">Available</span>
+            <div class="mt-1.5 space-y-1.5">
+              <template x-for="b in unplacedBlocks" :key="b.id">
+                <button @click="addBlock(b.id)" class="w-full flex items-center gap-2 rounded border border-zinc-200 px-3 py-2 text-left hover:border-zinc-400">
+                  <span class="flex-1">
+                    <span class="text-sm" x-text="b.label"></span>
+                    <span class="block text-[10px] font-mono text-zinc-400" x-text="b.id"></span>
+                  </span>
+                  <span class="text-zinc-400 text-sm">+ add</span>
+                </button>
+              </template>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────── 5. Extra configuration ─────────────── -->
+      <section class="border-b border-zinc-200">
+        <button @click="toggleSection('extra')" class="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-zinc-50">
+          <span class="text-xs font-semibold tracking-widest uppercase text-zinc-600">5 · Extra configuration</span>
+          <span class="text-zinc-400 text-xs" x-text="open === 'extra' ? '−' : '+'"></span>
+        </button>
+        <div x-show="open === 'extra'" class="px-5 pb-5 space-y-2">
+          <p class="text-[11px] text-zinc-500">Curated site-wide config, applied with <code class="font-mono">drush config:set</code> after recipes. Recipe-specific values belong in that recipe's options above.</p>
+          <template x-for="e in extras" :key="e.id">
+            <div class="rounded border px-3 py-2" :class="e.enabled ? 'border-zinc-800' : 'border-zinc-200'">
+              <label class="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" x-model="e.enabled" class="mt-0.5 accent-zinc-800">
+                <span class="flex-1">
+                  <span class="text-sm font-medium" x-text="e.label"></span>
+                  <span class="block text-[10px] font-mono text-zinc-400" x-text="`${e.config} → ${e.key}`"></span>
+                  <span class="block text-[11px] text-zinc-500 mt-0.5" x-text="e.description"></span>
+                </span>
+              </label>
+              <input x-show="e.enabled" type="text" x-model="e.value" class="mt-2 w-full rounded border border-zinc-300 px-2.5 py-1.5 text-sm bg-white focus:border-zinc-500 focus:outline-none">
+            </div>
+          </template>
+        </div>
+      </section>
+    </div>
+
+    <footer class="px-5 py-3.5 border-t border-zinc-200 bg-white">
+      <button @click="downloadConfig()" class="w-full rounded bg-zinc-900 text-white text-sm font-medium py-2.5 hover:bg-zinc-700">
+        Download config.dq.yml
+      </button>
+    </footer>
+  </aside>
+
+  <!-- ═══════════════════════════════ Preview pane ═══════════════════════ -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+
+    <div class="flex items-center justify-between px-6 pt-4 pb-3">
+      <div class="flex gap-1 rounded-lg bg-zinc-200/70 p-1">
+        <button @click="tab = 'preview'" class="px-4 py-1.5 rounded-md text-xs font-medium"
+                :class="tab === 'preview' ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700'">Preview</button>
+        <button @click="tab = 'config'" class="px-4 py-1.5 rounded-md text-xs font-medium"
+                :class="tab === 'config' ? 'bg-white shadow-sm' : 'text-zinc-500 hover:text-zinc-700'">config.dq.yml</button>
+      </div>
+      <button x-show="tab === 'config'" @click="copyConfig()" class="text-xs font-medium rounded border border-zinc-300 bg-white px-3 py-1.5 hover:border-zinc-500"
+              x-text="copied ? '✓ Copied' : 'Copy to clipboard'"></button>
+      <span x-show="tab === 'preview'" class="text-[11px] text-zinc-400">Static mock — real preset tokens, dummy content</span>
+    </div>
+
+    <!-- Preview tab -->
+    <div x-show="tab === 'preview'" class="flex-1 overflow-y-auto px-6 pb-6">
+      <div class="pv mx-auto max-w-4xl min-h-full rounded-lg shadow-lg overflow-hidden" :style="previewStyle">
+
+        <!-- Sidebar arrangement -->
+        <div x-show="theme.layout === 'sidebar'" class="flex min-h-[600px]">
+          <nav class="w-48 shrink-0 border-r p-6" style="border-color: var(--pv-rule)">
+            <div class="pv-site-name" x-text="site.name"></div>
+            <div class="pv-nav-v">
+              <template x-for="item in previewNav" :key="item"><a href="#" class="pv-nav-link" x-text="item"></a></template>
+            </div>
+          </nav>
+          <div class="flex-1 p-8" style="max-width: 42rem">
+            <div>
+              <template x-for="id in homepage" :key="id">
+                <section class="pv-block">
+                  <template x-if="id === 'blog/recent'">
+                    <div>
+                      <h2 class="pv-h2">Recent writing</h2>
+                      <div>
+                        <template x-for="a in articlesFor()" :key="a.title">
+                          <div class="pv-row"><span class="pv-row-title" x-text="a.title"></span><span class="pv-row-date" x-text="a.date"></span></div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="id === 'project/grid'">
+                    <div>
+                      <h2 class="pv-h2">Projects grid</h2>
+                      <div class="pv-grid">
+                        <template x-for="p in recipe('project').dummy.projects" :key="p.title">
+                          <div><div class="pv-card-thumb"></div><div class="pv-card-title" x-text="p.title"></div><div class="pv-card-blurb" x-text="p.blurb"></div></div>
+                        </template>
+                      </div>
+                    </div>
+                  </template>
+                </section>
+              </template>
+              <template x-if="!homepage.length && fallbackFront === 'writing'">
+                <section class="pv-block">
+                  <h2 class="pv-h2">Writing</h2>
+                  <div>
+                    <template x-for="a in articlesFor()" :key="a.title">
+                      <div class="pv-row"><span class="pv-row-title" x-text="a.title"></span><span class="pv-row-date" x-text="a.date"></span></div>
+                    </template>
+                  </div>
+                </section>
+              </template>
+              <template x-if="!homepage.length && fallbackFront === 'welcome'">
+                <div class="pv-welcome">No front page composed yet — Standard's default welcome stands.<br>Select recipes and compose the homepage in section 4.</div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single-column arrangement -->
+        <div x-show="theme.layout === 'single'" class="min-h-[600px]">
+          <header class="flex items-baseline justify-between border-b px-8 py-5" style="border-color: var(--pv-rule)">
+            <div class="pv-site-name" x-text="site.name"></div>
+            <nav class="pv-nav-h">
+              <template x-for="item in previewNav" :key="item"><a href="#" class="pv-nav-link" x-text="item"></a></template>
+            </nav>
+          </header>
+          <div class="p-8 mx-auto" style="max-width: 42rem">
+            <template x-for="id in homepage" :key="id">
+              <section class="pv-block">
+                <template x-if="id === 'blog/recent'">
+                  <div>
+                    <h2 class="pv-h2">Recent writing</h2>
+                    <div>
+                      <template x-for="a in articlesFor()" :key="a.title">
+                        <div class="pv-row"><span class="pv-row-title" x-text="a.title"></span><span class="pv-row-date" x-text="a.date"></span></div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="id === 'project/grid'">
+                  <div>
+                    <h2 class="pv-h2">Projects grid</h2>
+                    <div class="pv-grid">
+                      <template x-for="p in recipe('project').dummy.projects" :key="p.title">
+                        <div><div class="pv-card-thumb"></div><div class="pv-card-title" x-text="p.title"></div><div class="pv-card-blurb" x-text="p.blurb"></div></div>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </section>
+            </template>
+            <template x-if="!homepage.length && fallbackFront === 'writing'">
+              <section class="pv-block">
+                <h2 class="pv-h2">Writing</h2>
+                <div>
+                  <template x-for="a in articlesFor()" :key="a.title">
+                    <div class="pv-row"><span class="pv-row-title" x-text="a.title"></span><span class="pv-row-date" x-text="a.date"></span></div>
+                  </template>
+                </div>
+              </section>
+            </template>
+            <template x-if="!homepage.length && fallbackFront === 'welcome'">
+              <div class="pv-welcome">No front page composed yet — Standard's default welcome stands.<br>Select recipes and compose the homepage in section 4.</div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Config tab -->
+    <div x-show="tab === 'config'" class="flex-1 overflow-y-auto px-6 pb-6">
+      <pre class="mx-auto max-w-4xl rounded-lg bg-zinc-900 text-zinc-100 text-[12.5px] leading-relaxed p-6 overflow-x-auto shadow-lg font-mono" x-text="yaml()"></pre>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
