@@ -113,6 +113,20 @@ if (!$interactive) {
 echo "\n drupalquick — interactive setup\n";
 echo str_repeat('─', 40) . "\n\n";
 
+// The generated file is the developer's to own and edit — never clobber an
+// existing one without asking (the non-interactive path refuses outright).
+if (file_exists($destination)) {
+    $overwrite = strtolower(ask('config.dq.yml already exists. Overwrite it? (y/N)', 'n'));
+    if ($overwrite !== 'y' && $overwrite !== 'yes') {
+        echo "ℹ️  Keeping the existing config.dq.yml. Edit it, then run:\n";
+        echo "   composer exec dq-install\n";
+        if ($ddev) {
+            ddev_copy($packageRoot, $projectRoot);
+        }
+        exit(0);
+    }
+}
+
 // Site
 echo "--- Site ---\n";
 $siteName  = ask('Site name', 'My Drupal Site');
