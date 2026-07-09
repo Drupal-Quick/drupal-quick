@@ -3,6 +3,7 @@
 namespace DrupalQuick\Drush\Commands;
 
 use DrupalQuick\Ddev\StaticPreview;
+use DrupalQuick\Static\ExportHostRewrite;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -81,7 +82,19 @@ final class StaticExportCommand extends Command {
       }
     }
 
-    // 5. Run the static export. One path per worker process: Drupal
+    // 5. Clear Tome's static cache before every export. Tome's cache is
+    // content-keyed, not target-URI-keyed: a page rendered once under the
+    // site's live authoring host (e.g. a DDEV domain) is served from that
+    // cache as-is on later runs even after static.uri is set or changed,
+    // since nothing about the page's own content changed — leaking the
+    // authoring host into canonical links, RSS, and JSON-LD indefinitely.
+    // dq:static exists to represent the site's current state, so a full
+    // fresh render on every run is the correct default over a faster but
+    // possibly-stale incremental one (site sizes Quick targets make this
+    // cheap; path-count=1 below already trades some speed for correctness).
+    Drush::drush($self, 'php:eval', ["\\Drupal::cache('tome_static')->deleteAll();"])->mustRun();
+
+    // 6. Run the static export. One path per worker process: Drupal
     // memoizes per-request state in long-lived services (menu.active_trail
     // caches its route lookup for the life of the process), so Tome's
     // default of several paths per process bakes the first page's active
@@ -95,12 +108,21 @@ final class StaticExportCommand extends Command {
     }
     Drush::drush($self, 'tome:static', [], $opts)->mustRun();
 
+    $dir = $this->staticDirectory($self);
+
+    // 7. Belt-and-suspenders: rewrite any stray reference to the live
+    // authoring host into the configured URI across the exported files.
+    // Guards against the wrong host leaking through by any mechanism, not
+    // just the cache behavior above — cheap for a static site this size.
+    if ($uri) {
+      $this->rewriteExportHost($dir, $self, $uri);
+    }
+
     // @todo Investigate an optional post-generation optimization pass over the
     //   static output (the html/ dir): HTML/CSS/JS minification and image
     //   optimization — potentially by running Vite plugins (or a dedicated
     //   optimizer) across the exported files, behind a flag so it stays opt-in.
 
-    $dir = $this->staticDirectory($self);
     $this->io->writeln('✅ [drupalquick] Static export complete.');
     $this->io->writeln("   Output: {$dir}/ (override via \$settings['tome_static_directory'] in settings.php).");
     $this->io->writeln("   Deploy it with `drush dq:deploy`.");
@@ -123,6 +145,45 @@ final class StaticExportCommand extends Command {
     }
 
     return self::SUCCESS;
+  }
+
+  /**
+   * Rewrites the site's live authoring host to $targetUri across every
+   * text-like file in the export directory (see ExportHostRewrite).
+   */
+  private function rewriteExportHost(string $exportDir, $self, string $targetUri): void {
+    $process = Drush::drush($self, 'php:eval', ["echo \\Drupal::request()->getSchemeAndHttpHost();"]);
+    $process->run();
+    $liveHost = trim((string) $process->getOutput());
+    if ($liveHost === '' || rtrim($liveHost, '/') === rtrim($targetUri, '/')) {
+      return;
+    }
+
+    $path = str_starts_with($exportDir, '/') ? $exportDir : getcwd() . '/' . $exportDir;
+    if (!is_dir($path)) {
+      return;
+    }
+
+    $fixed = 0;
+    $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+      if (!$file->isFile() || !ExportHostRewrite::isRewritable($file->getPathname())) {
+        continue;
+      }
+      $contents = file_get_contents($file->getPathname());
+      if ($contents === FALSE) {
+        continue;
+      }
+      $rewritten = ExportHostRewrite::rewrite($contents, $liveHost, $targetUri);
+      if ($rewritten !== $contents) {
+        file_put_contents($file->getPathname(), $rewritten);
+        $fixed++;
+      }
+    }
+
+    if ($fixed > 0) {
+      $this->io->writeln("🔧 [drupalquick] Rewrote {$liveHost} → {$targetUri} in {$fixed} exported file(s).");
+    }
   }
 
   /**
