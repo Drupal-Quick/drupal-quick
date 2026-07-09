@@ -41,6 +41,7 @@ final class ScaffoldCommand extends Command {
   protected function configure(): void {
     $this
       ->addOption('interactive', NULL, InputOption::VALUE_NONE, 'Prompt the user to fill out or override config values interactively.')
+      ->addOption('force', NULL, InputOption::VALUE_NONE, 'Scaffold even when Drupal is already installed. This reinstalls the site and DESTROYS the existing database.')
       ->addUsage('dq:scaffold')
       ->addUsage('dq:scaffold --interactive');
   }
@@ -64,6 +65,20 @@ final class ScaffoldCommand extends Command {
     }
 
     $registry = $this->registry();
+
+    // Refuse to scaffold over a live site: the site:install in runBuild()
+    // drops and recreates the database, so an accidental re-run (e.g. while
+    // rehearsing the workflow) would destroy real content. The probe failing
+    // means no bootable site exists — a fresh project — which is exactly when
+    // scaffolding should proceed.
+    if (!$input->getOption('force')) {
+      $probe = Drush::drush(Drush::aliasManager()->getSelf(), 'php:eval', ["echo \\Drupal::state()->get('install_task') === 'done' ? 'installed' : '';"]);
+      $probe->run();
+      if ($probe->isSuccessful() && str_contains((string) $probe->getOutput(), 'installed')) {
+        $this->io->error('Drupal is already installed here. Re-running dq:scaffold would reinstall it and destroy the existing database. Pass --force to rebuild deliberately.');
+        return self::FAILURE;
+      }
+    }
 
     // --- Interactive prompts ---
     if ($input->getOption('interactive')) {
