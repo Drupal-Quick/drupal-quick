@@ -31,10 +31,11 @@ final class StaticExportCommand extends Command {
   protected function configure(): void {
     $this
       ->addOption('base-url', NULL, InputOption::VALUE_REQUIRED, 'The production base URL for absolute links, passed to Tome as --uri (overrides config).')
-      ->addOption('ddev-preview', NULL, InputOption::VALUE_NONE, 'Also provision a DDEV preview vhost (https://static.<project>.ddev.site) serving the export beside the live site. Requires a DDEV project; run `ddev restart` once afterwards.')
+      ->addOption('ddev-preview', NULL, InputOption::VALUE_NEGATABLE, 'Also provision a DDEV preview vhost (https://static.<project>.ddev.site) serving the export beside the live site. Defaults to on when the command runs inside a DDEV web container; --no-ddev-preview opts out. Run `ddev restart` once after the first provisioning.', NULL)
       ->addUsage('dq:static')
       ->addUsage('dq:static --base-url=https://example.com')
-      ->addUsage('dq:static --ddev-preview');
+      ->addUsage('dq:static --ddev-preview')
+      ->addUsage('dq:static --no-ddev-preview');
   }
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
@@ -98,9 +99,21 @@ final class StaticExportCommand extends Command {
     $this->io->writeln("   Output: {$dir}/ (override via \$settings['tome_static_directory'] in settings.php).");
     $this->io->writeln("   Deploy it with `drush dq:deploy`.");
 
-    // 6. Optionally provision the DDEV preview vhost for the export.
-    if ($input->getOption('ddev-preview')) {
+    // 6. Provision the DDEV preview vhost for the export. With no explicit
+    // flag this is automatic inside a DDEV web container (IS_DDEV_PROJECT is
+    // set by DDEV) — there the vhost is free and marker-guarded, so the only
+    // cost is two managed files. Auto mode degrades to a note when the
+    // project layout doesn't support it; only the explicit --ddev-preview
+    // treats that as a failure.
+    $preview = $input->getOption('ddev-preview');
+    if ($preview === TRUE) {
       return $this->provisionDdevPreview($dir);
+    }
+    if ($preview === NULL && getenv('IS_DDEV_PROJECT') === 'true') {
+      $this->io->writeln('🌐 [drupalquick] DDEV detected — provisioning the static preview vhost (skip with --no-ddev-preview).');
+      if ($this->provisionDdevPreview($dir) !== self::SUCCESS) {
+        $this->io->writeln('   Preview vhost skipped (see above); the export itself succeeded.');
+      }
     }
 
     return self::SUCCESS;
