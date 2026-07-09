@@ -58,6 +58,9 @@ final class StaticPreviewTest extends TestCase {
     // Static-only vhost: no PHP handler, 404 for unknown paths.
     $this->assertStringNotContainsString('fastcgi', $conf);
     $this->assertStringContainsString('try_files $uri $uri/ =404;', $conf);
+    // HTML revalidates every load so re-exports show immediately; assets cache.
+    $this->assertStringContainsString('add_header Cache-Control "no-cache";', $conf);
+    $this->assertStringContainsString('expires 1M;', $conf);
   }
 
   public function testHostnamesOverrideContent(): void {

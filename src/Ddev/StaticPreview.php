@@ -104,9 +104,13 @@ final class StaticPreview {
           error_log /dev/stdout info;
           access_log /var/log/nginx/access.log;
 
-          # Pure static files — no PHP handler on this vhost.
+          # Pure static files — no PHP handler on this vhost. HTML answers
+          # with no-cache so browsers revalidate on every load (a 304 when
+          # unchanged) and a fresh `drush dq:static` shows immediately —
+          # the asset types below stay cached.
           location / {
               absolute_redirect off;
+              add_header Cache-Control "no-cache";
               try_files \$uri \$uri/ =404;
           }
 
