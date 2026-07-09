@@ -81,9 +81,15 @@ final class StaticExportCommand extends Command {
       }
     }
 
-    // 5. Run the static export.
+    // 5. Run the static export. One path per worker process: Drupal
+    // memoizes per-request state in long-lived services (menu.active_trail
+    // caches its route lookup for the life of the process), so Tome's
+    // default of several paths per process bakes the first page's active
+    // menu trail into every later page in the chunk. Fresh process per
+    // path keeps the server-rendered markup truthful; parallelism across
+    // processes (--process-count) still applies.
     $this->io->writeln('🧊 [drupalquick] Generating static site with Tome...');
-    $opts = ['yes' => TRUE];
+    $opts = ['yes' => TRUE, 'path-count' => 1];
     if ($uri) {
       $opts['uri'] = $uri;
     }
