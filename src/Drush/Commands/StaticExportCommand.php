@@ -118,6 +118,17 @@ final class StaticExportCommand extends Command {
       $this->rewriteExportHost($dir, $self, $uri);
     }
 
+    // @todo Before launch: emit a _redirects file into the export from a
+    //   static.redirects map in config.dq.yml (persisted to drupalquick.static
+    //   like target/uri), written HERE — after tome:static, which regenerates
+    //   the export dir — alongside the host-rewrite pass above. Netlify-target
+    //   scoped: GitHub Pages ignores _redirects (would need meta-refresh
+    //   stubs), and the DDEV preview's nginx won't honor it either (document
+    //   that preview/production difference). Later, optionally merge entries
+    //   harvested from the redirect contrib module when it's installed (the
+    //   good idea inside tome_netlify) for editor-made renames on live sites.
+    //   Post-launch discipline this enables: no URL changes without a redirect.
+
     // @todo Investigate an optional post-generation optimization pass over the
     //   static output (the html/ dir): HTML/CSS/JS minification and image
     //   optimization — potentially by running Vite plugins (or a dedicated
