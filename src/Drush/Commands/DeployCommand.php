@@ -124,7 +124,11 @@ final class DeployCommand extends Command {
     $siteId = NetlifySite::siteIdFromState(file_exists($stateFile) ? (string) file_get_contents($stateFile) : NULL)
       ?: (getenv('NETLIFY_SITE_ID') ?: NULL);
     if ($siteId === NULL) {
-      $siteName = $settings['site_name'] ?? NetlifySite::generateSiteName(basename(getcwd()));
+      // Name base: the DDEV project name when inside DDEV — there the cwd is
+      // always /var/www/html, whose basename ("html") says nothing — else
+      // the project directory.
+      $base = getenv('DDEV_PROJECT') ?: basename(getcwd());
+      $siteName = $settings['site_name'] ?? NetlifySite::generateSiteName($base);
       $command[] = "--site-name={$siteName}";
       $this->io->writeln("   No linked Netlify site yet — creating '{$siteName}' (set static.site_name in config.dq.yml to choose the name).");
       $this->io->writeln('   The new site is linked via .netlify/state.json; later deploys reuse it.');
