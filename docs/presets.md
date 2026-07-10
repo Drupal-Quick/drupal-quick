@@ -134,8 +134,15 @@ Fonts / gstatic `woff2`) and `sha256`. On apply, the script:
    copy, so a repeat apply doesn't re-fetch;
 2. **generates** the `@font-face` rules from the manifest into a managed
    `dq:preset-extra` block in `main.css`, clearing it when switching back to a
-   token-only preset; and
-3. **prunes** any files in `src/fonts/` the active preset no longer needs.
+   token-only preset;
+3. **writes** a matching `<link rel="preload">` per font into a managed
+   `dq:preset-preload` block in `templates/layout/html.html.twig` — browsers
+   don't fetch a font just because its `@font-face` rule was parsed, they wait
+   until they need it for visible text, so this starts the fetch immediately
+   instead and shrinks the flash-of-unstyled-text window the manifest's
+   `font-display: swap` default allows. A fontless preset leaves the block
+   empty; and
+4. **prunes** any files in `src/fonts/` the active preset no longer needs.
 
 The font is bundled into `dist/` by Vite, so the built site is self-contained
 (no external font request at render time — good for the Tome static export). The
