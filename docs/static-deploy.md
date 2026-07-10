@@ -92,6 +92,20 @@ just writes `.github/workflows/deploy-pages.yml`. It is loosely coupled to the
 build: if `html/` is missing it tells you to run `dq:static` first rather than
 regenerating implicitly.
 
+**First deploy (Netlify):** with no site linked yet, the bare CLI would prompt
+interactively to pick or create a site — and `dq:deploy` runs it in a
+subprocess without a TTY, where that prompt would hang. So when neither the
+CLI's link file (`.netlify/state.json`) nor `NETLIFY_SITE_ID` resolves a site,
+`dq:deploy` passes `--site-name` to create one non-interactively: the name
+comes from `static.site_name` in `config.dq.yml` if set, else
+`<project>-<random>` (Netlify names are a global namespace — a bare common
+name is usually taken). The name is used exactly once: the deploy writes the
+created site's id to `.netlify/state.json`, and every later deploy resolves
+that id, never the name. Keep `state.json` (or set `NETLIFY_SITE_ID` in CI) —
+without either, a re-run would create a second site. Custom-domain mapping
+(e.g. pointing `quickthe.me` at the new site) stays a one-time manual step in
+the Netlify dashboard.
+
 ### Previewing the export under DDEV
 
 ```bash
