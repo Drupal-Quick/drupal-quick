@@ -57,7 +57,9 @@ final class StaticPreviewTest extends TestCase {
     $this->assertStringContainsString('server_name static.my-site.ddev.site;', $conf);
     // Static-only vhost: no PHP handler, 404 for unknown paths.
     $this->assertStringNotContainsString('fastcgi', $conf);
-    $this->assertStringContainsString('try_files $uri $uri/ =404;', $conf);
+    // $uri/index.html before $uri/: slashless URLs serve their directory
+    // index with a 200 — a 301 would break cross-document view transitions.
+    $this->assertStringContainsString('try_files $uri $uri/index.html $uri/ =404;', $conf);
     // HTML revalidates every load so re-exports show immediately; assets cache.
     $this->assertStringContainsString('add_header Cache-Control "no-cache";', $conf);
     $this->assertStringContainsString('expires 1M;', $conf);

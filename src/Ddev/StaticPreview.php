@@ -108,10 +108,18 @@ final class StaticPreview {
           # with no-cache so browsers revalidate on every load (a 304 when
           # unchanged) and a fresh `drush dq:static` shows immediately —
           # the asset types below stay cached.
+          #
+          # \$uri/index.html before \$uri/: the export's internal links are
+          # slashless (Drupal path form, matching the canonical tags), and
+          # \$uri/ alone would 301 them to the trailing-slash directory URL.
+          # That hop breaks cross-document view transitions — a redirect
+          # discards the old page's snapshot, turning the crossfade into a
+          # white flash — so serve the directory index at the slashless URL
+          # directly (200, no redirect).
           location / {
               absolute_redirect off;
               add_header Cache-Control "no-cache";
-              try_files \$uri \$uri/ =404;
+              try_files \$uri \$uri/index.html \$uri/ =404;
           }
 
           location ~* \\.(?:jpg|jpeg|gif|png|ico|svg|webp|woff2|css|js)\$ {
