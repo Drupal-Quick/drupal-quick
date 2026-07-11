@@ -118,6 +118,18 @@ final class StaticExportCommand extends Command {
       $this->rewriteExportHost($dir, $self, $uri);
     }
 
+    // 8. Emit a sibling <path>.html beside every <path>/index.html. The
+    // export's internal links are slashless (Drupal path form, matching the
+    // canonical tags), but static hosts 301 a slashless URL to its
+    // trailing-slash directory form — and that redirect discards the old
+    // page's view-transition snapshot, turning the page crossfade into a
+    // white flash. Netlify and GitHub Pages both resolve extensionless URLs
+    // to .html files *before* their directory handling, so the sibling makes
+    // slashless URLs serve directly (200, no redirect). The DDEV preview's
+    // nginx handles the same via try_files. Runs after the host rewrite so
+    // siblings copy the corrected markup.
+    $this->emitSlashlessSiblings($dir);
+
     // @todo Before launch: emit a _redirects file into the export from a
     //   static.redirects map in config.dq.yml (persisted to drupalquick.static
     //   like target/uri), written HERE — after tome:static, which regenerates
@@ -194,6 +206,39 @@ final class StaticExportCommand extends Command {
 
     if ($fixed > 0) {
       $this->io->writeln("🔧 [drupalquick] Rewrote {$liveHost} → {$targetUri} in {$fixed} exported file(s).");
+    }
+  }
+
+  /**
+   * Copies every <dir>/index.html in the export to a sibling <dir>.html so
+   * slashless URLs resolve as files on static hosts (no 301 — see step 8).
+   * A real page that already exports as <dir>.html is never overwritten.
+   */
+  private function emitSlashlessSiblings(string $exportDir): void {
+    $root = str_starts_with($exportDir, '/') ? $exportDir : getcwd() . '/' . $exportDir;
+    if (!is_dir($root)) {
+      return;
+    }
+    $emitted = 0;
+    $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
+    foreach ($iterator as $file) {
+      if (!$file->isFile() || $file->getFilename() !== 'index.html') {
+        continue;
+      }
+      $dir = dirname($file->getPathname());
+      // The export root's own index.html is "/" — no sibling to emit.
+      if ($dir === $root) {
+        continue;
+      }
+      $sibling = $dir . '.html';
+      if (file_exists($sibling)) {
+        continue;
+      }
+      copy($file->getPathname(), $sibling);
+      $emitted++;
+    }
+    if ($emitted > 0) {
+      $this->io->writeln("🔗 [drupalquick] Emitted {$emitted} slashless .html sibling(s) so static hosts serve extensionless URLs without redirecting.");
     }
   }
 

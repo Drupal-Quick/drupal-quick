@@ -8,17 +8,13 @@
   command = ""
 
 # --- URL form -----------------------------------------------------------------
-# Serve extensionless paths as their directory index directly (200) instead of
-# Netlify's default 301 to the trailing-slash URL. The export's internal links
-# are slashless (Drupal path form, matching the canonical tags), and the 301
-# hop breaks cross-document view transitions — a redirect discards the old
-# page's snapshot, turning the crossfade into a white flash. force is off, so
-# real files (assets) always win over the rewrite.
-[[redirects]]
-  from = "/*"
-  to = "/:splat/index.html"
-  status = 200
-  force = false
+# The export's internal links are slashless (Drupal path form, matching the
+# canonical tags). Netlify would 301 those to the trailing-slash directory URL
+# — and that hop breaks cross-document view transitions (a redirect discards
+# the old page's snapshot, turning the crossfade into a white flash). dq:static
+# therefore emits a sibling <path>.html beside every <path>/index.html; Netlify
+# resolves extensionless URLs to .html files *before* its directory handling,
+# so slashless URLs serve directly (200, no redirect). No config needed here.
 
 # --- Caching ----------------------------------------------------------------
 # Netlify applies the most specific matching rule, so the broad HTML default
