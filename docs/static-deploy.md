@@ -92,15 +92,33 @@ just writes `.github/workflows/deploy-pages.yml`. It is loosely coupled to the
 build: if `html/` is missing it tells you to run `dq:static` first rather than
 regenerating implicitly.
 
-### Previewing the export under DDEV (`--ddev-preview`)
+**First deploy (Netlify):** with no site linked yet, the bare CLI would prompt
+interactively to pick or create a site — and `dq:deploy` runs it in a
+subprocess without a TTY, where that prompt would hang. So when neither the
+CLI's link file (`.netlify/state.json`) nor `NETLIFY_SITE_ID` resolves a site,
+`dq:deploy` passes `--site-name` to create one non-interactively: the name
+comes from `static.site_name` in `config.dq.yml` if set, else
+`<project>-<random>` (Netlify names are a global namespace — a bare common
+name is usually taken). The name is used exactly once: the deploy writes the
+created site's id to `.netlify/state.json`, and every later deploy resolves
+that id, never the name. Keep `state.json` (or set `NETLIFY_SITE_ID` in CI) —
+without either, a re-run would create a second site. Custom-domain mapping
+(e.g. pointing `quickthe.me` at the new site) stays a one-time manual step in
+the Netlify dashboard.
+
+### Previewing the export under DDEV
 
 ```bash
-ddev drush dq:static --ddev-preview
-ddev restart   # once, to activate the new hostname
+ddev drush dq:static   # inside DDEV the preview vhost is provisioned automatically
+ddev restart           # once, to activate the new hostname
 # then browse https://static.<project>.ddev.site
 ```
 
-The flag provisions a second vhost in the same DDEV project that serves the
+When `dq:static` runs inside a DDEV web container (detected via DDEV's
+`IS_DDEV_PROJECT` environment variable) the preview vhost is provisioned
+automatically; pass `--no-ddev-preview` to opt out, or `--ddev-preview` to
+require it (outside DDEV, or to make a missing `.ddev/` an error instead of
+a note). The provisioning creates a second vhost in the same DDEV project that serves the
 export directory as plain files (no PHP handler), beside the live site — so
 the export can be checked exactly as a host would serve it, and re-exports
 are just a refresh away. It writes two files:
@@ -112,7 +130,7 @@ are just a refresh away. It writes two files:
   `config.yaml` is never edited.
 
 Both carry a `#dq-generated` marker: they are rewritten on every
-`--ddev-preview` run until the marker line is removed, at which point the
+provisioning run until the marker line is removed, at which point the
 tool leaves them alone (the same ownership convention DDEV uses for its
 generated files). The command runs inside the web container, so it cannot
 restart DDEV itself — hence the one-time `ddev restart`.

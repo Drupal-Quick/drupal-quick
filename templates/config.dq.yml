@@ -79,3 +79,9 @@ static:
   target: "netlify"
   # Production base URL for absolute links in the exported HTML (optional).
   uri: "https://example.com"
+  # Netlify site name for the very first `drush dq:deploy` (optional). Only
+  # used when no site is linked yet — the deploy creates <site_name>.netlify.app
+  # and links it (.netlify/state.json); later deploys reuse the linked site.
+  # Omit to auto-generate <project>-<random>. Netlify names are global, so
+  # bare common names are usually taken.
+  # site_name: "my-site"

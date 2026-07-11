@@ -7,6 +7,15 @@
   publish = "html"
   command = ""
 
+# --- URL form -----------------------------------------------------------------
+# The export's internal links are slashless (Drupal path form, matching the
+# canonical tags). Netlify would 301 those to the trailing-slash directory URL
+# — and that hop breaks cross-document view transitions (a redirect discards
+# the old page's snapshot, turning the crossfade into a white flash). dq:static
+# therefore emits a sibling <path>.html beside every <path>/index.html; Netlify
+# resolves extensionless URLs to .html files *before* its directory handling,
+# so slashless URLs serve directly (200, no redirect). No config needed here.
+
 # --- Caching ----------------------------------------------------------------
 # Netlify applies the most specific matching rule, so the broad HTML default
 # below is overridden by the asset rules. Netlify also serves Brotli/gzip

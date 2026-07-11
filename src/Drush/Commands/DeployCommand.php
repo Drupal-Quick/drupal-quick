@@ -2,6 +2,7 @@
 
 namespace DrupalQuick\Drush\Commands;
 
+use DrupalQuick\Deploy\NetlifySite;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -62,7 +63,7 @@ final class DeployCommand extends Command {
     $this->emitDeployTemplate($target);
 
     // 4. Deploy.
-    return $this->deployStatic($target, $dir);
+    return $this->deployStatic($target, $dir, $settings);
   }
 
   /**
@@ -95,7 +96,7 @@ final class DeployCommand extends Command {
   /**
    * Deploys the static export to the configured target (Netlify automated).
    */
-  private function deployStatic(string $target, string $dir = 'html'): int {
+  private function deployStatic(string $target, string $dir, array $settings): int {
     if ($target !== 'netlify') {
       $this->io->warning("dq:deploy currently automates the 'netlify' target only. For '{$target}', deploy via its own workflow (e.g. git push for GitHub Pages — the workflow was written to .github/workflows/).");
       return self::SUCCESS;
@@ -108,6 +109,30 @@ final class DeployCommand extends Command {
     $command = $netlify
       ? [$netlify, 'deploy', '--prod', "--dir={$dir}"]
       : ['npx', '--yes', 'netlify-cli', 'deploy', '--prod', "--dir={$dir}"];
+
+    // Resolve the Netlify site. With no linked site (the CLI's
+    // .netlify/state.json, written by the first successful deploy) and no
+    // NETLIFY_SITE_ID, the CLI would prompt to pick or create one — and this
+    // subprocess has no TTY, so the prompt hangs instead of asking. Pass
+    // --site-name on that first deploy so the CLI creates the site
+    // non-interactively; the name comes from static.site_name in
+    // config.dq.yml, else <project-dir>-<random> (Netlify names are a global
+    // namespace, so a bare project name is likely taken). The name is used
+    // exactly once: the deploy links the created site's id into state.json,
+    // which every later deploy resolves instead.
+    $stateFile = getcwd() . '/.netlify/state.json';
+    $siteId = NetlifySite::siteIdFromState(file_exists($stateFile) ? (string) file_get_contents($stateFile) : NULL)
+      ?: (getenv('NETLIFY_SITE_ID') ?: NULL);
+    if ($siteId === NULL) {
+      // Name base: the DDEV project name when inside DDEV — there the cwd is
+      // always /var/www/html, whose basename ("html") says nothing — else
+      // the project directory.
+      $base = getenv('DDEV_PROJECT') ?: basename(getcwd());
+      $siteName = $settings['site_name'] ?? NetlifySite::generateSiteName($base);
+      $command[] = "--site-name={$siteName}";
+      $this->io->writeln("   No linked Netlify site yet — creating '{$siteName}' (set static.site_name in config.dq.yml to choose the name).");
+      $this->io->writeln('   The new site is linked via .netlify/state.json; later deploys reuse it.');
+    }
 
     $this->io->writeln('🚀 [drupalquick] Deploying to Netlify...');
     $code = $this->runProcess($command);
