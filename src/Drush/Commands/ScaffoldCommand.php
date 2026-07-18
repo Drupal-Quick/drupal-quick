@@ -50,6 +50,9 @@ final class ScaffoldCommand extends Command {
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
     $this->io = new DrushStyle($input, $output);
+    if (!$this->guardDdevEnvironment()) {
+      return self::FAILURE;
+    }
 
     $configFile = getcwd() . '/config.dq.yml';
     if (!file_exists($configFile)) {

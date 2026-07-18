@@ -7,7 +7,7 @@
  * Full workflow:
  *   1. composer exec dq-init    — creates config.dq.yml
  *   2. composer exec dq-install — THIS SCRIPT
- *   3. drush dq:scaffold        — installs Drupal and builds the site
+ *   3. ddev drush dq:scaffold   — installs Drupal and builds the site
  *
  * Reads config.dq.yml and resolves each recipe against the registry
  * (templates/recipe-registry.json). Registry recipes are standalone Composer
@@ -44,12 +44,23 @@ require_once $autoload;
 // so they resolve regardless of the consumer autoloader's state.
 require_once $packageRoot . '/src/Config/RecipeOptions.php';
 require_once $packageRoot . '/src/Config/RecipeBlocks.php';
+require_once $packageRoot . '/src/Environment/Comingling.php';
 
 use DrupalQuick\Config\RecipeOptions;
 use DrupalQuick\Config\RecipeBlocks;
+use DrupalQuick\Environment\Comingling;
 use Symfony\Component\Yaml\Yaml;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Process\Process;
+
+// Refuse a host run inside a DDEV project — run `ddev composer exec dq-install`.
+if ($guard = Comingling::hostInDdevProjectError($projectRoot, Comingling::env())) {
+    fwrite(STDERR, "❌ {$guard}\n");
+    exit(1);
+}
+
+// Next-step guidance prefixed with `ddev` in a DDEV project (bare otherwise).
+$cmd = is_file($projectRoot . '/.ddev/config.yaml') ? 'ddev ' : '';
 
 /**
  * Runs an external command via Symfony Process, streaming its output.
@@ -86,7 +97,7 @@ try {
 $recipes = $config['recipes'] ?? [];
 if (empty($recipes)) {
     echo "ℹ️  No recipes listed in config.dq.yml. Nothing to install.\n";
-    echo "   Run `drush dq:scaffold` when ready.\n";
+    echo "   Run `{$cmd}drush dq:scaffold` when ready.\n";
     exit(0);
 }
 
@@ -200,7 +211,7 @@ if (!empty($toRequire)) {
 if (empty($toRequire)) {
     echo "ℹ️  No drupalquick-managed recipes to install (core/contrib recipes\n";
     echo "   are already available on disk).\n";
-    echo "   Run `drush dq:scaffold` when ready.\n";
+    echo "   Run `{$cmd}drush dq:scaffold` when ready.\n";
     exit(0);
 }
 
@@ -329,4 +340,4 @@ if ($needsOptionWrite || $needsBlockWrite) {
     }
 }
 
-echo "\n   Run `drush dq:scaffold` to build your site.\n";
+echo "\n   Run `{$cmd}drush dq:scaffold` to build your site.\n";
