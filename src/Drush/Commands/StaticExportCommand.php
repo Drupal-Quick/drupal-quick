@@ -97,59 +97,66 @@ final class StaticExportCommand extends Command {
       Drush::drush($self, 'theme:dev', ['off'], ['yes' => TRUE])->mustRun();
     }
 
-    // 5. Clear Tome's static cache before every export. Tome's cache is
-    // content-keyed, not target-URI-keyed: a page rendered once under the
-    // site's live authoring host (e.g. a DDEV domain) is served from that
-    // cache as-is on later runs even after static.uri is set or changed,
-    // since nothing about the page's own content changed — leaking the
-    // authoring host into canonical links, RSS, and JSON-LD indefinitely.
-    // dq:static exists to represent the site's current state, so a full
-    // fresh render on every run is the correct default over a faster but
-    // possibly-stale incremental one (site sizes Quick targets make this
-    // cheap; path-count=1 below already trades some speed for correctness).
-    Drush::drush($self, 'php:eval', ["\\Drupal::cache('tome_static')->deleteAll();"])->mustRun();
+    // The export runs inside try/finally so that if we disabled Twig dev mode
+    // above, it is ALWAYS restored — even when tome:static (a mustRun) throws
+    // partway. Without this a failed export would silently strand the
+    // developer's site in production mode.
+    try {
+      // 5. Clear Tome's static cache before every export. Tome's cache is
+      // content-keyed, not target-URI-keyed: a page rendered once under the
+      // site's live authoring host (e.g. a DDEV domain) is served from that
+      // cache as-is on later runs even after static.uri is set or changed,
+      // since nothing about the page's own content changed — leaking the
+      // authoring host into canonical links, RSS, and JSON-LD indefinitely.
+      // dq:static exists to represent the site's current state, so a full
+      // fresh render on every run is the correct default over a faster but
+      // possibly-stale incremental one (site sizes Quick targets make this
+      // cheap; path-count=1 below already trades some speed for correctness).
+      Drush::drush($self, 'php:eval', ["\\Drupal::cache('tome_static')->deleteAll();"])->mustRun();
 
-    // 6. Run the static export. One path per worker process: Drupal
-    // memoizes per-request state in long-lived services (menu.active_trail
-    // caches its route lookup for the life of the process), so Tome's
-    // default of several paths per process bakes the first page's active
-    // menu trail into every later page in the chunk. Fresh process per
-    // path keeps the server-rendered markup truthful; parallelism across
-    // processes (--process-count) still applies.
-    $this->io->writeln('🧊 [drupalquick] Generating static site with Tome...');
-    $opts = ['yes' => TRUE, 'path-count' => 1];
-    if ($uri) {
-      $opts['uri'] = $uri;
+      // 6. Run the static export. One path per worker process: Drupal
+      // memoizes per-request state in long-lived services (menu.active_trail
+      // caches its route lookup for the life of the process), so Tome's
+      // default of several paths per process bakes the first page's active
+      // menu trail into every later page in the chunk. Fresh process per
+      // path keeps the server-rendered markup truthful; parallelism across
+      // processes (--process-count) still applies.
+      $this->io->writeln('🧊 [drupalquick] Generating static site with Tome...');
+      $opts = ['yes' => TRUE, 'path-count' => 1];
+      if ($uri) {
+        $opts['uri'] = $uri;
+      }
+      Drush::drush($self, 'tome:static', [], $opts)->mustRun();
+
+      $dir = $this->staticDirectory($self);
+
+      // 7. Belt-and-suspenders: rewrite any stray reference to the live
+      // authoring host into the configured URI across the exported files.
+      // Guards against the wrong host leaking through by any mechanism, not
+      // just the cache behavior above — cheap for a static site this size.
+      if ($uri) {
+        $this->rewriteExportHost($dir, $self, $uri);
+      }
+
+      // 8. Emit a sibling <path>.html beside every <path>/index.html. The
+      // export's internal links are slashless (Drupal path form, matching the
+      // canonical tags), but static hosts 301 a slashless URL to its
+      // trailing-slash directory form — and that redirect discards the old
+      // page's view-transition snapshot, turning the page crossfade into a
+      // white flash. Netlify and GitHub Pages both resolve extensionless URLs
+      // to .html files *before* their directory handling, so the sibling makes
+      // slashless URLs serve directly (200, no redirect). The DDEV preview's
+      // nginx handles the same via try_files. Runs after the host rewrite so
+      // siblings copy the corrected markup.
+      $this->emitSlashlessSiblings($dir);
     }
-    Drush::drush($self, 'tome:static', [], $opts)->mustRun();
-
-    $dir = $this->staticDirectory($self);
-
-    // 7. Belt-and-suspenders: rewrite any stray reference to the live
-    // authoring host into the configured URI across the exported files.
-    // Guards against the wrong host leaking through by any mechanism, not
-    // just the cache behavior above — cheap for a static site this size.
-    if ($uri) {
-      $this->rewriteExportHost($dir, $self, $uri);
-    }
-
-    // 8. Emit a sibling <path>.html beside every <path>/index.html. The
-    // export's internal links are slashless (Drupal path form, matching the
-    // canonical tags), but static hosts 301 a slashless URL to its
-    // trailing-slash directory form — and that redirect discards the old
-    // page's view-transition snapshot, turning the page crossfade into a
-    // white flash. Netlify and GitHub Pages both resolve extensionless URLs
-    // to .html files *before* their directory handling, so the sibling makes
-    // slashless URLs serve directly (200, no redirect). The DDEV preview's
-    // nginx handles the same via try_files. Runs after the host rewrite so
-    // siblings copy the corrected markup.
-    $this->emitSlashlessSiblings($dir);
-
-    // Restore Twig development mode if the export turned it off, so the
-    // developer's local session picks up where it left off.
-    if ($wasThemeDev) {
-      Drush::drush($self, 'theme:dev', ['on'], ['yes' => TRUE])->run();
-      $this->io->writeln('🧑‍🎨 [drupalquick] Restored Twig development mode (drush theme:dev off to disable).');
+    finally {
+      // Restore Twig development mode if the export turned it off, so the
+      // developer's local session picks up where it left off.
+      if ($wasThemeDev) {
+        Drush::drush($self, 'theme:dev', ['on'], ['yes' => TRUE])->run();
+        $this->io->writeln('🧑‍🎨 [drupalquick] Restored Twig development mode (drush theme:dev off to disable).');
+      }
     }
 
     // @todo Before launch: emit a _redirects file into the export from a
