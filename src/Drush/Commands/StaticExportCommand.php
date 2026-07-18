@@ -82,6 +82,21 @@ final class StaticExportCommand extends Command {
       }
     }
 
+    // 4.5. If Twig development mode is on (dq:scaffold enables it for local
+    // theme iteration), turn it off for the export: with twig debug on, Drupal
+    // bakes `<!-- THEME HOOK -->` / file-name-suggestion comments into every
+    // rendered page, which would leak template paths into the static HTML.
+    // Toggling it off restores the production render; it's restored afterward
+    // so the developer's session continues. It's a DB key-value, so reading and
+    // flipping it is cheap and leaves no file trace.
+    $probe = Drush::drush($self, 'php:eval', ["echo \\Drupal::keyValue('development_settings')->get('twig_debug') ? '1' : '';"]);
+    $probe->run();
+    $wasThemeDev = $probe->isSuccessful() && trim((string) $probe->getOutput()) === '1';
+    if ($wasThemeDev) {
+      $this->io->writeln('🧑‍🎨 [drupalquick] Twig development mode is on — disabling it for a clean export (restored afterward).');
+      Drush::drush($self, 'theme:dev', ['off'], ['yes' => TRUE])->mustRun();
+    }
+
     // 5. Clear Tome's static cache before every export. Tome's cache is
     // content-keyed, not target-URI-keyed: a page rendered once under the
     // site's live authoring host (e.g. a DDEV domain) is served from that
@@ -129,6 +144,13 @@ final class StaticExportCommand extends Command {
     // nginx handles the same via try_files. Runs after the host rewrite so
     // siblings copy the corrected markup.
     $this->emitSlashlessSiblings($dir);
+
+    // Restore Twig development mode if the export turned it off, so the
+    // developer's local session picks up where it left off.
+    if ($wasThemeDev) {
+      Drush::drush($self, 'theme:dev', ['on'], ['yes' => TRUE])->run();
+      $this->io->writeln('🧑‍🎨 [drupalquick] Restored Twig development mode (drush theme:dev off to disable).');
+    }
 
     // @todo Before launch: emit a _redirects file into the export from a
     //   static.redirects map in config.dq.yml (persisted to drupalquick.static
