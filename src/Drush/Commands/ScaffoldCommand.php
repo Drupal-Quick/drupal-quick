@@ -42,12 +42,17 @@ final class ScaffoldCommand extends Command {
     $this
       ->addOption('interactive', NULL, InputOption::VALUE_NONE, 'Prompt the user to fill out or override config values interactively.')
       ->addOption('force', NULL, InputOption::VALUE_NONE, 'Scaffold even when Drupal is already installed. This reinstalls the site and DESTROYS the existing database.')
+      ->addOption('theme-dev', NULL, InputOption::VALUE_NEGATABLE, 'Enable Twig development mode (twig debug + auto-reload, caches off) via `drush theme:dev` after the build, for live theme iteration. Defaults to on inside a DDEV web container; --no-theme-dev opts out. Reverse any time with `drush theme:dev off`.', NULL)
       ->addUsage('dq:scaffold')
-      ->addUsage('dq:scaffold --interactive');
+      ->addUsage('dq:scaffold --interactive')
+      ->addUsage('dq:scaffold --no-theme-dev');
   }
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
     $this->io = new DrushStyle($input, $output);
+    if (!$this->guardDdevEnvironment()) {
+      return self::FAILURE;
+    }
 
     $configFile = getcwd() . '/config.dq.yml';
     if (!file_exists($configFile)) {
@@ -103,11 +108,17 @@ final class ScaffoldCommand extends Command {
       $this->io->writeln("✅ Configuration updated for this session.\n");
     }
 
+    // Resolve theme-dev: explicit flag wins; otherwise default on inside a
+    // DDEV web container (the local-iteration context), like dq:static's
+    // --ddev-preview. Applied at the end of a successful build.
+    $themeDevOpt = $input->getOption('theme-dev');
+    $enableThemeDev = $themeDevOpt ?? (getenv('IS_DDEV_PROJECT') === 'true');
+
     // Run the build phases inside one try/catch: every Drush call below uses
     // mustRun(), so any failure aborts with a clear "site may be partially
     // built" message instead of a raw stack trace.
     try {
-      return $this->runBuild($config, $registry);
+      return $this->runBuild($config, $registry, $enableThemeDev);
     }
     catch (\Throwable $e) {
       $this->io->error('Scaffold failed: ' . $e->getMessage());
@@ -119,7 +130,7 @@ final class ScaffoldCommand extends Command {
   /**
    * Runs the build phases: install → theme → recipes → config → assets.
    */
-  private function runBuild(array $config, array $registry): int {
+  private function runBuild(array $config, array $registry, bool $enableThemeDev = FALSE): int {
     $siteName    = $config['site']['name'] ?? 'Drupal Site';
     $accountName = $config['site']['admin_user'] ?? 'admin';
     // Secure default: when no admin_pass is configured, generate a strong one
@@ -499,6 +510,24 @@ PHP;
 
     $this->io->writeln('🎉 [drupalquick] Scaffold complete. Rebuilding caches...');
     Drush::drush(Drush::aliasManager()->getSelf(), 'cache:rebuild')->mustRun();
+
+    // Enable Twig development mode for live theme iteration (twig debug +
+    // auto-reload, render/page/dynamic caches off). This is Drupal's own
+    // development-settings mechanism (a key-value in the DB, not a file), so it
+    // survives rebuilds, is never committed or deployed, and reverses with
+    // `drush theme:dev off`. dq:static turns it off for the export so no debug
+    // comments leak into the static HTML.
+    if ($enableThemeDev) {
+      $this->io->writeln('🧑‍🎨 [drupalquick] Enabling Twig development mode (drush theme:dev on)...');
+      $devProc = Drush::drush(Drush::aliasManager()->getSelf(), 'theme:dev', ['on'], ['yes' => TRUE]);
+      $devProc->run();
+      if ($devProc->isSuccessful()) {
+        $this->io->writeln('   Twig debug + auto-reload on, caches off. Turn off with `drush theme:dev off`.');
+      }
+      else {
+        $this->io->warning('Could not enable Twig development mode (drush theme:dev on). Needs Drush 13.6+. Skipped; the build is otherwise complete.');
+      }
+    }
 
     return self::SUCCESS;
   }

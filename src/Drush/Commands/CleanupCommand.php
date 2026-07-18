@@ -37,6 +37,9 @@ final class CleanupCommand extends Command {
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
     $this->io = new DrushStyle($input, $output);
+    if (!$this->guardDdevEnvironment()) {
+      return self::FAILURE;
+    }
     $purge = $input->getOption('purge') || $input->getOption('remove-everything');
 
     if (!$input->getOption('force')) {

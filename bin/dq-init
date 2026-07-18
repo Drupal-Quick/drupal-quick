@@ -4,40 +4,59 @@
 /**
  * dq-init: Step 1 of the drupalquick workflow.
  *
- * Full workflow:
- *   1. composer exec dq-init [--interactive] [--ddev]  ← this script
+ * Full workflow (DDEV-first — prefix each step with `ddev`):
+ *   1. ddev composer exec dq-init [--interactive] [--no-ddev]  ← this script
  *      Delivers config.dq.yml to the project root.
- *   2. composer exec dq-install
+ *   2. ddev composer exec dq-install
  *      Installs any drupalquick-managed recipe packages via Composer.
- *   3. drush dq:scaffold
+ *   3. ddev drush dq:scaffold
  *      Installs Drupal, generates the theme, applies recipes, builds assets.
  *
  * The sole output of this script is config.dq.yml — a single YAML file the
  * developer reviews and owns before anything is installed. No Drupal code is
  * touched here; dq:scaffold is what actually builds the site.
  *
- * Without flags — copies the template and exits. The user edits the file
- * then runs `composer exec dq-install`.
+ * DDEV is the default context: dq-init also drops the DDEV local config into
+ * .ddev/ (config.local.yaml + the deploy-credentials example). Running on the
+ * host inside a DDEV project is refused (see Comingling) — use `ddev`.
+ *
+ * Without flags — copies the template + DDEV local config and exits. The user
+ * edits config.dq.yml then runs `ddev composer exec dq-install`.
  *
  * With --interactive — walks the user through site, theme, and recipe
  * choices via CLI prompts and writes a pre-filled config.dq.yml.
  *
- * With --ddev — copies the drupalquick DDEV local config template into the
- * project's .ddev/ directory if one exists. Can be combined with either of
- * the above modes.
+ * With --no-ddev — bare-host setup: skips the DDEV local config (you supply
+ * your own PHP/Node/database/webserver). Combines with the modes above.
  */
 
 $packageRoot = dirname(__DIR__);
 $projectRoot = getcwd();
 $destination = $projectRoot . '/config.dq.yml';
 $interactive = in_array('--interactive', $argv, true);
-$ddev        = in_array('--ddev', $argv, true);
+// DDEV is Quick's default install context; --no-ddev opts into a bare-host
+// setup (you then supply your own PHP/Node/DB/webserver). --ddev is still
+// accepted as an explicit no-op for clarity.
+$ddev        = !in_array('--no-ddev', $argv, true);
 
-// Preset discovery is a plain class in this package — required directly, so
-// the script keeps working without any Composer autoloader.
+// Plain classes, required directly so the script works without a Composer
+// autoloader.
 require_once $packageRoot . '/src/Config/PresetDiscovery.php';
+require_once $packageRoot . '/src/Environment/Comingling.php';
 
 use DrupalQuick\Config\PresetDiscovery;
+use DrupalQuick\Environment\Comingling;
+
+// Refuse a host run inside a DDEV project — mixing host and container tooling
+// diverges composer/npm state and the host can't reach DDEV's database.
+if ($guard = Comingling::hostInDdevProjectError($projectRoot, Comingling::env())) {
+    fwrite(STDERR, "❌ {$guard}\n");
+    exit(1);
+}
+
+// Next-step guidance is copy-paste correct for the project's mode: prefix with
+// `ddev` when this is a DDEV project, bare otherwise.
+$cmd = is_file($projectRoot . '/.ddev/config.yaml') ? 'ddev ' : '';
 
 // ------------------------------------------------------------------ Helpers
 
@@ -88,7 +107,7 @@ function chooseMany(string $question, array $options): array {
 if (!$interactive) {
     if (file_exists($destination)) {
         echo "ℹ️  config.dq.yml already exists. Edit it, then run:\n";
-        echo "   composer exec dq-install\n";
+        echo "   {$cmd}composer exec dq-install\n";
     } else {
         $source = $packageRoot . '/templates/config.dq.yml';
         if (!copy($source, $destination)) {
@@ -97,7 +116,7 @@ if (!$interactive) {
         }
         echo "✅ config.dq.yml created in project root.\n";
         echo "   Edit it to configure your site, then run:\n";
-        echo "   composer exec dq-install\n";
+        echo "   {$cmd}composer exec dq-install\n";
     }
 
     // Handle --ddev regardless of whether config already existed.
@@ -119,7 +138,7 @@ if (file_exists($destination)) {
     $overwrite = strtolower(ask('config.dq.yml already exists. Overwrite it? (y/N)', 'n'));
     if ($overwrite !== 'y' && $overwrite !== 'yes') {
         echo "ℹ️  Keeping the existing config.dq.yml. Edit it, then run:\n";
-        echo "   composer exec dq-install\n";
+        echo "   {$cmd}composer exec dq-install\n";
         if ($ddev) {
             ddev_copy($packageRoot, $projectRoot);
         }
@@ -270,7 +289,7 @@ if (file_put_contents($destination, $yaml) === false) {
 
 echo "\n✅ config.dq.yml created.\n";
 echo "   Review it, make any edits, then run:\n";
-echo "   composer exec dq-install\n";
+echo "   {$cmd}composer exec dq-install\n";
 
 if ($ddev) {
     ddev_copy($packageRoot, $projectRoot);
@@ -286,7 +305,8 @@ function ddev_copy(string $packageRoot, string $projectRoot): void {
     $src     = $packageRoot . '/templates/ddev/config.local.yaml';
 
     if (!is_dir($ddevDir)) {
-        echo "ℹ️  --ddev passed but no .ddev directory found in project root. Skipping.\n";
+        echo "ℹ️  No .ddev directory found. Quick is DDEV-first — run `ddev config`\n";
+        echo "   to set up DDEV, then re-run. (For a bare-host setup, pass --no-ddev.)\n";
         return;
     }
 

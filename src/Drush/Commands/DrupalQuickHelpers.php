@@ -4,6 +4,7 @@ namespace DrupalQuick\Drush\Commands;
 
 use Drupal\Component\Serialization\Json;
 use Drupal\Component\Serialization\Yaml;
+use DrupalQuick\Environment\Comingling;
 use Drush\Drush;
 use Drush\Style\DrushStyle;
 use Symfony\Component\Process\Process;
@@ -21,6 +22,22 @@ trait DrupalQuickHelpers {
    * Styled IO for the running command. Assigned at the top of execute().
    */
   protected DrushStyle $io;
+
+  /**
+   * Refuses to run on the host inside a DDEV project (see Comingling).
+   *
+   * Call at the top of execute(), after $this->io is set:
+   *   if (!$this->guardDdevEnvironment()) { return self::FAILURE; }
+   * Returns FALSE (with an error printed) when the command should abort.
+   */
+  protected function guardDdevEnvironment(): bool {
+    $msg = Comingling::hostInDdevProjectError(getcwd(), Comingling::env());
+    if ($msg !== NULL) {
+      $this->io->error($msg);
+      return FALSE;
+    }
+    return TRUE;
+  }
 
   /**
    * Returns the Drupal web root (the docroot, e.g. the project's web/ dir).

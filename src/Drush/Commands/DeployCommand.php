@@ -40,6 +40,9 @@ final class DeployCommand extends Command {
 
   protected function execute(InputInterface $input, OutputInterface $output): int {
     $this->io = new DrushStyle($input, $output);
+    if (!$this->guardDdevEnvironment()) {
+      return self::FAILURE;
+    }
     $self = Drush::aliasManager()->getSelf();
 
     // 1. Resolve the target (flag overrides persisted/config setting).
